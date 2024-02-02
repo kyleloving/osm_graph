@@ -20,10 +20,16 @@ To use the library in Rust, add it to your Cargo.toml:
 
 ```toml
 [dependencies]
-osm-graph = { git = "https://github.com/kyleloving/osm_graph/.git" }
+osm-graph = "0.1.0"
 ```
 
-For Python, ensure you have Rust and maturin installed, then build and install the Python package:
+For Python, 
+
+```bash
+pip install pysochrone
+```
+
+Or, ensure you have Rust and maturin installed, then build and install the Python package:
 
 ```bash
 maturin develop

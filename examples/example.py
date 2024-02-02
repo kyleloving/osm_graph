@@ -1,7 +1,6 @@
 import pysochrone
 import json
 import folium
-import time 
 
 def main():
     # Example coordinates and parameters

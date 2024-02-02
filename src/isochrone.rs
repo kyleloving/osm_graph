@@ -2,7 +2,7 @@ use crate::graph;
 use crate::overpass;
 use crate::cache;
 
-use geo::{ConcaveHull, ConvexHull, MultiPoint, Polygon};
+use geo::{ConcaveHull, ConvexHull, KNearestConcaveHull, MultiPoint, Polygon};
 use petgraph::algo::dijkstra;
 use petgraph::prelude::*;
 use petgraph::visit::Reversed;
@@ -10,6 +10,7 @@ use std::collections::HashSet;
 
 #[derive(Debug, Copy, Clone)]
 pub enum HullType {
+    FastConcave,
     Concave,
     Convex,
 }
@@ -44,7 +45,8 @@ pub fn calculate_isochrones(
         let points: MultiPoint<f64> = isochrone_lat_lons.into();
 
         let hull = match hull_type {
-            HullType::Concave => points.concave_hull(2.0),
+            HullType::FastConcave => points.concave_hull(2.0),
+            HullType::Concave => points.k_nearest_concave_hull(3),
             HullType::Convex => points.convex_hull(),
         };
 
@@ -92,7 +94,8 @@ fn calculate_isochrones_concurrently(
             let points: MultiPoint<f64> = isochrone_lat_lons.into();
 
             match hull_type {
-                HullType::Concave => points.concave_hull(2.0),
+                HullType::FastConcave => points.concave_hull(2.0),
+                HullType::Concave => points.k_nearest_concave_hull(3),
                 HullType::Convex => points.convex_hull(),
             }
         });
@@ -140,7 +143,8 @@ pub fn calculate_reverse_isochrones(
         let points: MultiPoint<f64> = isochrone_lat_lons.into();
 
         let hull = match hull_type {
-            HullType::Concave => points.concave_hull(0.0001),
+            HullType::FastConcave => points.concave_hull(2.0),
+            HullType::Concave => points.k_nearest_concave_hull(3),
             HullType::Convex => points.convex_hull(),
         };
 

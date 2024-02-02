@@ -36,6 +36,7 @@ fn calc_isochrones(
     // Convert hull_type string to HullType enum
     let hull_type_enum = match hull_type.as_str() {
         "Convex" => isochrone::HullType::Convex,
+        "FastConcave" => isochrone::HullType::FastConcave,
         "Concave" => isochrone::HullType::Concave,
         _ => {
             return Err(pyo3::PyErr::new::<pyo3::exceptions::PyValueError, _>(

@@ -88,45 +88,47 @@ pub struct XmlTag {
     pub value: String,
 }
 
+
+struct PathDirectionality {
+    is_one_way: bool,
+    is_reversed: bool,
+}
+
 // Function to parse the XML response
 pub fn parse_xml(xml_data: &str) -> Result<XmlData, quick_xml::DeError> {
     let root: XmlData = quick_xml::de::from_str(xml_data)?;
     Ok(root)
 }
 
-// Function checks whether a path is one way
-fn is_path_one_way(path: &XmlWay, bidirectional: bool) -> bool {
-    let oneway_values = ["yes", "true", "1", "-1", "reverse", "T", "F"];
-
-    // Rule 1: Bi-directional network type
-    if bidirectional {
-        return false;
-    }
-
-    // Rule 2: Check 'oneway' tag
-    if let Some(oneway_tag) = path.tags.iter().find(|tag| tag.key == "oneway") {
-        return oneway_values.contains(&oneway_tag.value.as_str());
-    }
-
-    // Rule 3: Check 'junction' tag for roundabouts
-    if let Some(junction_tag) = path.tags.iter().find(|tag| tag.key == "junction") {
-        return junction_tag.value == "roundabout";
-    }
-
-    false
-}
-
-fn is_path_reversed(path: &XmlWay) -> bool {
-    let reversed_values = ["-1", "reverse", "T"];
-    if let Some(oneway_tag) = path.tags.iter().find(|tag| tag.key == "oneway") {
-        return reversed_values.contains(&oneway_tag.value.as_str());
-    }
-
-    false
-}
-
 fn find_tag<'a>(tags: &'a [XmlTag], key: &str) -> Option<&'a XmlTag> {
     tags.iter().find(|tag| tag.key == key)
+}
+
+fn assess_path_directionality(path: &XmlWay) -> PathDirectionality {
+    let oneway_tag = find_tag(&path.tags, "oneway");
+    let junction_tag = find_tag(&path.tags, "junction");
+
+    let is_one_way = match oneway_tag {
+        Some(tag) => {
+            // The oneway tag can have several values indicating true: "yes", "true", "1"
+            // or indicating reversed: "-1", "reverse"
+            // Any other value (including absence of the tag) defaults to false
+            matches!(tag.value.as_str(), "yes" | "true" | "1" | "-1" | "reverse")
+        },
+        None => false,
+    };
+
+    let is_reversed = oneway_tag.map_or(false, |tag| {
+        matches!(tag.value.as_str(), "-1" | "reverse")
+    });
+
+    // Roundabouts are considered one-way implicitly
+    let is_roundabout = junction_tag.map_or(false, |tag| tag.value == "roundabout");
+
+    PathDirectionality {
+        is_one_way: is_one_way || is_roundabout,
+        is_reversed,
+    }
 }
 
 // Function to create the network graph
@@ -134,7 +136,7 @@ pub fn create_graph(
     nodes: Vec<XmlNode>,
     ways: Vec<XmlWay>,
     _retain_all: bool,
-    bidirectional: bool,
+    _bidirectional: bool,
 ) -> DiGraph<XmlNode, XmlWay> {
     let mut graph = DiGraph::<XmlNode, XmlWay>::new();
     let mut node_index_map = HashMap::new();
@@ -148,12 +150,11 @@ pub fn create_graph(
     // Add edges to the graph
     for way in ways {
         let filtered_way = way.filter_useful_tags();
-        let is_one_way = is_path_one_way(&filtered_way, bidirectional);
-        let is_reversed = is_path_reversed(&filtered_way);
+        let path_direction = assess_path_directionality(&filtered_way);
 
         for window in filtered_way.nodes.windows(2) {
             if let [start_ref, end_ref] = window {
-                let (start_index, end_index) = if is_reversed {
+                let (start_index, end_index) = if path_direction.is_reversed {
                     (
                         node_index_map[&end_ref.node_id],
                         node_index_map[&start_ref.node_id],
@@ -166,7 +167,7 @@ pub fn create_graph(
                 };
 
                 graph.add_edge(start_index, end_index, filtered_way.clone());
-                if !is_one_way {
+                if !path_direction.is_one_way {
                     graph.add_edge(end_index, start_index, filtered_way.clone());
                 }
             }

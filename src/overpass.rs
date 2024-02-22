@@ -1,5 +1,5 @@
 // Define an enum for network types
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum NetworkType {
     Drive,
     DriveService,

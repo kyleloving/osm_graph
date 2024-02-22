@@ -41,11 +41,16 @@ Rust
 use osm_graph::{calculate_isochrones_from_point, HullType};
 
 async fn main() {
-    let isochrones = calculate_isochrones_from_point(
-        48.123456, 11.123456, 5000.0, vec![600.0, 1200.0, 1800.0], HullType::Convex
-    ).await.unwrap();
-    
-    // Process isochrones...
+    let isochrone = isochrone::calculate_isochrones_from_point(
+        48.123456,
+        11.123456,
+        10_000.0,
+        vec![300.0, 600.0, 900.0, 1_200.0, 1_500.0, 1_800.0],
+        overpass::NetworkType::Drive,
+        isochrone::HullType::Convex,
+    )
+    .await
+    .unwrap();
 }
 ```
 
@@ -54,18 +59,27 @@ Python
 ```python
 import pysochrone
 
-isochrones = pysochrone.calc_isochrones(48.123456, 11.123456, 5000, [600, 1200, 1800], "Convex")
-print(isochrones)
+isochrones = pysochrone.calc_isochrones(
+    48.123456, 
+    11.123456, 
+    5000, 
+    [600, 1200, 1800], 
+    "Drive", 
+    "Convex"
+)
 ```
 
 ## Roadmap
-- Customizable Speed Limits: Allow users to specify custom speed limits for different road types.
-- Support for Pedestrian and Bicycle Networks: Expand the graph construction to support pedestrian and bicycle network types.
-- Additional Roadnetwork analytics.
-- Advanced Caching Strategies: Implement more sophisticated caching mechanisms for dynamic query parameters.
-- Interactive Visualization Tools: Develop a set of tools for interactive visualization of isochrones in web applications.
-- API Integration: Provide integration options with third-party APIs for enhanced data accuracy and features.
-- Optimization and Parallel Computing: Further optimize the graph algorithms and explore parallel computing options for large-scale data.
+- [ ] Testing and benchmarks.
+- [ ] Customizable Speed Limits: Allow users to specify custom speed limits for different road types.
+- [✓] Support for Pedestrian and Bicycle Networks: Expand the graph construction to support pedestrian and bicycle network types.
+- [ ] Topological simplification of osm graphs for more efficient downstream analytics.
+- [ ] Additional Roadnetwork analytics.
+- [ ] Routing engine.
+- [ ] Advanced Caching Strategies: Implement more sophisticated caching mechanisms for dynamic query parameters.
+- [ ] Interactive Visualization Tools: Develop a set of tools for interactive visualization of isochrones in web applications.
+- [ ] API Integration: Provide integration options with third-party APIs for enhanced data accuracy and features.
+- [ ] Optimization and Parallel Computing: Further optimize the graph algorithms and explore parallel computing options for large-scale data.
 
 ## Contributing
 Contributions are welcome! Please submit pull requests, open issues for discussion, and suggest new features or improvements.

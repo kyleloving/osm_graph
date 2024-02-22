@@ -36,7 +36,11 @@ pub struct XmlWay {
     #[serde(default)]
     pub speed_kph: f64,
     #[serde(default)]
-    pub travel_time: f64,
+    pub walk_travel_time: f64,
+    #[serde(default)]
+    pub bike_travel_time: f64,
+    #[serde(default)]
+    pub drive_travel_time: f64,
 }
 
 impl XmlWay {
@@ -254,8 +258,13 @@ fn clean_maxspeed(maxspeed: &str) -> f64 {
 fn add_edge_travel_times(graph: &mut DiGraph<XmlNode, XmlWay>) {
     for edge in graph.edge_indices() {
         let way = graph.edge_weight_mut(edge).unwrap();
-        let travel_time = calculate_travel_time(way.length, way.speed_kph);
-        way.travel_time = travel_time;
+        let walk_travel_time = calculate_travel_time(way.length, 5.0);
+        let bike_travel_time = calculate_travel_time(way.length, 15.0);
+        let drive_travel_time = calculate_travel_time(way.length, way.speed_kph);
+
+        way.walk_travel_time = walk_travel_time;
+        way.bike_travel_time = bike_travel_time;
+        way.drive_travel_time = drive_travel_time;
     }
 }
 

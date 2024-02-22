@@ -35,7 +35,11 @@ pub struct XmlWay {
     #[serde(default)]
     pub speed_kph: f64,
     #[serde(default)]
-    pub travel_time: f64,
+    pub walk_travel_time: f64,
+    #[serde(default)]
+    pub bike_travel_time: f64,
+    #[serde(default)]
+    pub drive_travel_time: f64,
 }
 
 impl XmlWay {
@@ -197,75 +201,6 @@ pub fn create_graph(
     graph
 }
 
-// WIP
-fn simplify_graph(graph: &DiGraph<XmlNode, XmlWay>) -> DiGraph<XmlNode, XmlWay> {
-    let mut simplified_graph = DiGraph::new();
-    let mut endpoints = HashSet::new();
-    let mut index_map = HashMap::new();
-
-    // Identify endpoints and add them to the simplified graph
-    for node in graph.node_indices() {
-        if is_endpoint(graph, node) {
-            endpoints.insert(node);
-            let new_index = simplified_graph.add_node(graph[node].clone());
-            index_map.insert(node, new_index);
-        }
-    }
-
-    // Build and simplify paths
-    for &endpoint in &endpoints {
-        for neighbor in graph.neighbors(endpoint) {
-            if endpoints.contains(&neighbor) || simplified_graph.contains_edge(endpoint, neighbor) {
-                continue;
-            }
-
-            let path = build_path(graph, endpoint, &endpoints);
-            if let Some(&last) = path.last() {
-                if endpoints.contains(&last) {
-                    // Aggregate edge data along the path
-                    let mut total_length = 0.0;
-                    let mut total_time = 0.0;
-                    let mut speeds = Vec::new();
-
-                    for window in path.windows(2) {
-                        if let [u, v] = window {
-                            if let Some(edge) = graph.find_edge(*u, *v) {
-                                let way = graph.edge_weight(edge).unwrap();
-                                total_length += way.length;
-                                total_time += way.travel_time;
-                                speeds.push(way.speed_kph);
-                            }
-                        }
-                    }
-
-                    // Calculate average speed
-                    let avg_speed = if !speeds.is_empty() {
-                        speeds.iter().sum::<f64>() / speeds.len() as f64
-                    } else {
-                        0.0
-                    };
-
-                    // Create a new XmlWay with the aggregated data
-                    let xml_way = XmlWay {
-                        id: 0, // You might want to generate a unique ID or handle this differently
-                        nodes: vec![],
-                        tags: vec![],
-                        length: total_length,
-                        travel_time: total_time,
-                        speed_kph: avg_speed,
-                    };
-                    let new_endpoint = *index_map.get(&endpoint).unwrap();
-                    let new_last = *index_map.get(&last).unwrap();
-
-                    simplified_graph.add_edge(new_endpoint, new_last, xml_way);
-                }
-            }
-        }
-    }
-
-    simplified_graph
-}
-
 fn is_endpoint(graph: &DiGraph<XmlNode, XmlWay>, node_index: NodeIndex) -> bool {
     let out_neighbors: HashSet<_> = graph
         .neighbors_directed(node_index, petgraph::Outgoing)
@@ -390,8 +325,13 @@ fn clean_maxspeed(maxspeed: &str) -> f64 {
 fn add_edge_travel_times(graph: &mut DiGraph<XmlNode, XmlWay>) {
     for edge in graph.edge_indices() {
         let way = graph.edge_weight_mut(edge).unwrap();
-        let travel_time = calculate_travel_time(way.length, way.speed_kph);
-        way.travel_time = travel_time;
+        let walk_travel_time = calculate_travel_time(way.length, 5.0);
+        let bike_travel_time = calculate_travel_time(way.length, 15.0);
+        let drive_travel_time = calculate_travel_time(way.length, way.speed_kph);
+
+        way.walk_travel_time = walk_travel_time;
+        way.bike_travel_time = bike_travel_time;
+        way.drive_travel_time = drive_travel_time;
     }
 }
 

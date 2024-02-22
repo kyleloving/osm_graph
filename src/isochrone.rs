@@ -1,6 +1,7 @@
 use crate::graph;
 use crate::overpass;
 use crate::cache;
+use crate::overpass::NetworkType;
 
 use geo::{ConcaveHull, ConvexHull, KNearestConcaveHull, MultiPoint, Polygon};
 use petgraph::algo::dijkstra;
@@ -26,7 +27,7 @@ pub fn calculate_isochrones(
     // Compute shortest paths from start_node
     let shortest_paths = dijkstra(graph, start_node, None, |e| {
         let edge_weight = graph.edge_weight(e.id()).unwrap();
-        edge_weight.travel_time
+        edge_weight.drive_travel_time
     });
 
     // For each time limit, find unique nodes that are within that limit
@@ -60,6 +61,7 @@ fn calculate_isochrones_concurrently(
     graph: std::sync::Arc<DiGraph<graph::XmlNode, graph::XmlWay>>,
     start_node: NodeIndex,
     time_limits: Vec<f64>,
+    network_type: overpass::NetworkType,
     hull_type: HullType,
 ) -> Vec<Polygon> {
     let mut handles = vec![];
@@ -70,7 +72,11 @@ fn calculate_isochrones_concurrently(
             // Call dijkstra and get the shortest paths HashMap
             let shortest_paths = dijkstra(&*graph_clone, start_node, None, |e| {
                 let edge_weight = graph_clone.edge_weight(e.id()).unwrap();
-                edge_weight.travel_time
+                match network_type {
+                    NetworkType::Walk => edge_weight.walk_travel_time,
+                    NetworkType::Bike => edge_weight.bike_travel_time,
+                    _ => edge_weight.drive_travel_time,
+                }
             });
 
             // Iterate over the shortest paths and collect nodes within the time limit
@@ -115,6 +121,7 @@ pub fn calculate_reverse_isochrones(
     graph: &DiGraph<graph::XmlNode, graph::XmlWay>,
     start_node: NodeIndex,
     time_limits: Vec<f64>,
+    network_type: overpass::NetworkType,
     hull_type: HullType,
 ) -> Vec<Polygon> {
     let mut reverse_isochrones = Vec::new();
@@ -122,9 +129,12 @@ pub fn calculate_reverse_isochrones(
     // Dijkstra's algorithm in reverse, considering incoming edges
     let reversed_graph = Reversed(graph);
     let shortest_paths = dijkstra(&reversed_graph, start_node, None, |e| {
-        // Assuming 'travel_time' is a field in XmlWay
         let edge_weight = graph.edge_weight(e.id()).unwrap();
-        edge_weight.travel_time
+        match network_type {
+            NetworkType::Walk => edge_weight.walk_travel_time,
+            NetworkType::Bike => edge_weight.bike_travel_time,
+            _ => edge_weight.drive_travel_time,
+        }
     });
 
     // For each time limit, find nodes that can reach start node within that limit
@@ -189,6 +199,7 @@ pub async fn calculate_isochrones_from_point(
             shared_graph,
             node_index.unwrap(),
             time_limits,
+            network_type,
             hull_type,
         );
 
@@ -229,6 +240,7 @@ pub async fn calculate_isochrones_from_point(
             shared_graph,
             node_index.unwrap(),
             time_limits,
+            network_type,
             hull_type,
         );
 
@@ -263,7 +275,7 @@ pub async fn calculate_reverse_isochrones_from_point(
     // Step 5: Calculate Isochrone
     let node_index = graph::latlon_to_node(&graph, lat, lon);
     let isochrones =
-        calculate_reverse_isochrones(&graph, node_index.unwrap(), time_limits, hull_type);
+        calculate_reverse_isochrones(&graph, node_index.unwrap(), time_limits, network_type, hull_type);
 
     Ok(isochrones)
 }

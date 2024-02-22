@@ -3,7 +3,7 @@
 
 This library provides a set of tools for generating isochrones and reverse isochrones from geographic coordinates. It leverages OpenStreetMap data to construct road networks and calculate areas accessible within specified time limits. The library is designed for both Rust and Python, offering high performance and easy integration into data science workflows.
 
-![Isochrones](image.png)
+![Isochrones](isochrones.png)
 
 ## Features
 - Graph Construction: Parses OpenStreetMap data to construct a graph representing the road network.

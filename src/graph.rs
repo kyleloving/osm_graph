@@ -202,10 +202,11 @@ fn simplify_graph(graph: &DiGraph<XmlNode, XmlWay>) -> DiGraph<XmlNode, XmlWay> 
     let mut simplified_graph = DiGraph::new();
     let mut endpoints = HashSet::new();
     let mut index_map = HashMap::new();
+    let endpoint_attrs: [String] = [];
 
     // Identify endpoints and add them to the simplified graph
     for node in graph.node_indices() {
-        if is_endpoint(graph, node) {
+        if is_endpoint(graph, node, &endpoint_attrs) {
             endpoints.insert(node);
             let new_index = simplified_graph.add_node(graph[node].clone());
             index_map.insert(node, new_index);
@@ -266,7 +267,11 @@ fn simplify_graph(graph: &DiGraph<XmlNode, XmlWay>) -> DiGraph<XmlNode, XmlWay> 
     simplified_graph
 }
 
-fn is_endpoint(graph: &DiGraph<XmlNode, XmlWay>, node_index: NodeIndex) -> bool {
+fn is_endpoint(
+    graph: &DiGraph<XmlNode, XmlWay>, 
+    node_index: NodeIndex,
+    endpoint_attrs: &[String],
+) -> bool {
     let out_neighbors: HashSet<_> = graph
         .neighbors_directed(node_index, petgraph::Outgoing)
         .collect();
@@ -294,20 +299,28 @@ fn is_endpoint(graph: &DiGraph<XmlNode, XmlWay>, node_index: NodeIndex) -> bool 
         return true;
     }
 
-    // // Rule 3: Check edge attributes
-    // if !endpoint_attrs.is_empty() {
-    //     let mut values = HashSet::new();
-    //     for attr in endpoint_attrs {
-    //         for edge in graph.edges(node_index) {
-    //             if let Some(value) = edge.weight().tags.iter().find(|tag| tag.key == *attr).map(|tag| &tag.value) {
-    //                 values.insert(value);
-    //             }
-    //         }
-    //     }
-    //     if values.len() > 1 {
-    //         return true;
-    //     }
-    // }
+    // Rule 4: Differing edge attribute values
+    for attr in endpoint_attrs {
+        let mut in_values = HashSet::new();
+        let mut out_values = HashSet::new();
+
+        for edge in graph.edges_directed(node_index, petgraph::Incoming) {
+            if let Some(value) = edge.weight().tags.iter().find(|tag| tag.key == *attr) {
+                in_values.insert(&value.value);
+            }
+        }
+
+        for edge in graph.edges_directed(node_index, petgraph::Outgoing) {
+            if let Some(value) = edge.weight().tags.iter().find(|tag| tag.key == *attr) {
+                out_values.insert(&value.value);
+            }
+        }
+
+        // Check if there's more than one unique value across in and out edges
+        if in_values.union(&out_values).count() > 1 {
+            return true;
+        }
+    }
 
     false
 }

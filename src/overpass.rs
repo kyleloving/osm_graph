@@ -1,6 +1,3 @@
-use reqwest;
-
-
 // Define an enum for network types
 #[derive(Debug)]
 pub enum NetworkType {

@@ -1,6 +1,7 @@
 use petgraph::graph::{DiGraph, NodeIndex};
 use serde::Deserialize;
 use std::collections::{HashMap, HashSet};
+use crate::utils::{calculate_distance, calculate_travel_time};
 
 #[derive(Debug, Deserialize)]
 pub struct XmlData {
@@ -124,6 +125,10 @@ fn is_path_reversed(path: &XmlWay) -> bool {
     false
 }
 
+fn find_tag<'a>(tags: &'a [XmlTag], key: &str) -> Option<&'a XmlTag> {
+    tags.iter().find(|tag| tag.key == key)
+}
+
 // Function to create the network graph
 pub fn create_graph(
     nodes: Vec<XmlNode>,
@@ -197,160 +202,6 @@ pub fn create_graph(
     graph
 }
 
-// WIP
-fn simplify_graph(graph: &DiGraph<XmlNode, XmlWay>) -> DiGraph<XmlNode, XmlWay> {
-    let mut simplified_graph = DiGraph::new();
-    let mut endpoints = HashSet::new();
-    let mut index_map = HashMap::new();
-    let endpoint_attrs: [String] = [];
-
-    // Identify endpoints and add them to the simplified graph
-    for node in graph.node_indices() {
-        if is_endpoint(graph, node, &endpoint_attrs) {
-            endpoints.insert(node);
-            let new_index = simplified_graph.add_node(graph[node].clone());
-            index_map.insert(node, new_index);
-        }
-    }
-
-    // Build and simplify paths
-    for &endpoint in &endpoints {
-        for neighbor in graph.neighbors(endpoint) {
-            if endpoints.contains(&neighbor) || simplified_graph.contains_edge(endpoint, neighbor) {
-                continue;
-            }
-
-            let path = build_path(graph, endpoint, &endpoints);
-            if let Some(&last) = path.last() {
-                if endpoints.contains(&last) {
-                    // Aggregate edge data along the path
-                    let mut total_length = 0.0;
-                    let mut total_time = 0.0;
-                    let mut speeds = Vec::new();
-
-                    for window in path.windows(2) {
-                        if let [u, v] = window {
-                            if let Some(edge) = graph.find_edge(*u, *v) {
-                                let way = graph.edge_weight(edge).unwrap();
-                                total_length += way.length;
-                                total_time += way.travel_time;
-                                speeds.push(way.speed_kph);
-                            }
-                        }
-                    }
-
-                    // Calculate average speed
-                    let avg_speed = if !speeds.is_empty() {
-                        speeds.iter().sum::<f64>() / speeds.len() as f64
-                    } else {
-                        0.0
-                    };
-
-                    // Create a new XmlWay with the aggregated data
-                    let xml_way = XmlWay {
-                        id: 0, // You might want to generate a unique ID or handle this differently
-                        nodes: vec![],
-                        tags: vec![],
-                        length: total_length,
-                        travel_time: total_time,
-                        speed_kph: avg_speed,
-                    };
-                    let new_endpoint = *index_map.get(&endpoint).unwrap();
-                    let new_last = *index_map.get(&last).unwrap();
-
-                    simplified_graph.add_edge(new_endpoint, new_last, xml_way);
-                }
-            }
-        }
-    }
-
-    simplified_graph
-}
-
-fn is_endpoint(
-    graph: &DiGraph<XmlNode, XmlWay>, 
-    node_index: NodeIndex,
-    endpoint_attrs: &[String],
-) -> bool {
-    let out_neighbors: HashSet<_> = graph
-        .neighbors_directed(node_index, petgraph::Outgoing)
-        .collect();
-    let in_neighbors: HashSet<_> = graph
-        .neighbors_directed(node_index, petgraph::Incoming)
-        .collect();
-    let total_neighbors: HashSet<_> = out_neighbors.union(&in_neighbors).collect();
-
-    let out_degree = out_neighbors.len();
-    let in_degree = in_neighbors.len();
-    let total_degree = total_neighbors.len();
-
-    // Check if self-loop exists
-    if out_neighbors.contains(&node_index) || in_neighbors.contains(&node_index) {
-        return true;
-    }
-
-    // Check if no incoming or outgoing edges
-    if out_degree == 0 || in_degree == 0 {
-        return true;
-    }
-
-    // Check the degree condition
-    if total_degree != 2 && total_degree != 4 {
-        return true;
-    }
-
-    // Rule 4: Differing edge attribute values
-    for attr in endpoint_attrs {
-        let mut in_values = HashSet::new();
-        let mut out_values = HashSet::new();
-
-        for edge in graph.edges_directed(node_index, petgraph::Incoming) {
-            if let Some(value) = edge.weight().tags.iter().find(|tag| tag.key == *attr) {
-                in_values.insert(&value.value);
-            }
-        }
-
-        for edge in graph.edges_directed(node_index, petgraph::Outgoing) {
-            if let Some(value) = edge.weight().tags.iter().find(|tag| tag.key == *attr) {
-                out_values.insert(&value.value);
-            }
-        }
-
-        // Check if there's more than one unique value across in and out edges
-        if in_values.union(&out_values).count() > 1 {
-            return true;
-        }
-    }
-
-    false
-}
-
-fn build_path(
-    graph: &DiGraph<XmlNode, XmlWay>,
-    start: NodeIndex,
-    endpoints: &HashSet<NodeIndex>,
-) -> Vec<NodeIndex> {
-    let mut path = vec![start];
-    let mut current = start;
-
-    // Continue until an endpoint is reached
-    while !endpoints.contains(&current) {
-        // Find a successor of 'current' that is not already in 'path'
-        if let Some(successor) = graph
-            .neighbors_directed(current, petgraph::Outgoing)
-            .find(|&n| !path.contains(&n))
-        {
-            path.push(successor);
-            current = successor;
-        } else {
-            // If no successor is found, or all successors are already in 'path', break
-            break;
-        }
-    }
-
-    path
-}
-
 fn add_edge_lengths(graph: &mut DiGraph<XmlNode, XmlWay>) {
     for edge in graph.edge_indices() {
         let (start_index, end_index) = graph.edge_endpoints(edge).unwrap();
@@ -406,28 +257,6 @@ fn add_edge_travel_times(graph: &mut DiGraph<XmlNode, XmlWay>) {
         let travel_time = calculate_travel_time(way.length, way.speed_kph);
         way.travel_time = travel_time;
     }
-}
-
-// Function to calculate travel times
-fn calculate_travel_time(length: f64, speed_kph: f64) -> f64 {
-    let speed_m_per_s = speed_kph / 3.6;
-    length / speed_m_per_s // Returns time in seconds
-}
-
-// Function to calculate distance
-fn calculate_distance(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
-    let radius_earth = 6371000.0; // Radius of the Earth in meters
-
-    let dlat = (lat2 - lat1).to_radians();
-    let dlon = (lon2 - lon1).to_radians();
-
-    let lat1 = lat1.to_radians();
-    let lat2 = lat2.to_radians();
-
-    let a = (dlat / 2.0).sin().powi(2) + (dlon / 2.0).sin().powi(2) * lat1.cos() * lat2.cos();
-    let c = 2.0 * a.sqrt().asin();
-
-    radius_earth * c // Distance in meters
 }
 
 pub fn node_to_latlon(graph: &DiGraph<XmlNode, XmlWay>, node_index: NodeIndex) -> (f64, f64) {

@@ -88,7 +88,6 @@ pub struct XmlTag {
     pub value: String,
 }
 
-
 struct PathDirectionality {
     is_one_way: bool,
     is_reversed: bool,

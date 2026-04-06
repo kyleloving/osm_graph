@@ -5,6 +5,9 @@ mod isochrone;
 mod overpass;
 mod utils;
 mod cache;
+mod simplify;
+mod error;
+mod tests;
 
 use pyo3::prelude::*;
 
@@ -17,8 +20,8 @@ fn calc_isochrones(
     time_limits: Vec<f64>,
     network_type: String,
     hull_type: String,
+    retain_all: Option<bool>,
 ) -> PyResult<Vec<String>> {
-    // Convert network_type string to NetworkType enum
     let network_type_enum = match network_type.as_str() {
         "Drive" => overpass::NetworkType::Drive,
         "DriveService" => overpass::NetworkType::DriveService,
@@ -26,28 +29,24 @@ fn calc_isochrones(
         "Bike" => overpass::NetworkType::Bike,
         "All" => overpass::NetworkType::All,
         "AllPrivate" => overpass::NetworkType::AllPrivate,
-        _ => {
-            return Err(pyo3::PyErr::new::<pyo3::exceptions::PyValueError, _>(
-                "Invalid network type",
-            ))
-        }
+        _ => return Err(pyo3::exceptions::PyValueError::new_err(
+            format!("Invalid network type '{}'. Expected one of: Drive, DriveService, Walk, Bike, All, AllPrivate", network_type)
+        )),
     };
 
-    // Convert hull_type string to HullType enum
     let hull_type_enum = match hull_type.as_str() {
         "Convex" => isochrone::HullType::Convex,
         "FastConcave" => isochrone::HullType::FastConcave,
         "Concave" => isochrone::HullType::Concave,
-        _ => {
-            return Err(pyo3::PyErr::new::<pyo3::exceptions::PyValueError, _>(
-                "Invalid hull type",
-            ))
-        }
+        _ => return Err(pyo3::exceptions::PyValueError::new_err(
+            format!("Invalid hull type '{}'. Expected one of: Convex, FastConcave, Concave", hull_type)
+        )),
     };
 
-    // Create a new Tokio runtime
-    let rt = tokio::runtime::Runtime::new().unwrap();
-    let isochrones = rt
+    let rt = tokio::runtime::Runtime::new()
+        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+
+    let (isochrones, _) = rt
         .block_on(isochrone::calculate_isochrones_from_point(
             lat,
             lon,
@@ -55,17 +54,13 @@ fn calc_isochrones(
             time_limits,
             network_type_enum,
             hull_type_enum,
-        ))
-        .unwrap();
+            retain_all.unwrap_or(false),
+        ))?;
 
-    // Convert from Geo::Polygon to GeoJSON string
-    let mut isochrones_converted = Vec::new();
-    for isochrone in isochrones {
-        let converted = utils::polygon_to_geojson_string(&isochrone);
-        isochrones_converted.push(converted);
-    }
-
-    Ok(isochrones_converted)
+    Ok(isochrones
+        .iter()
+        .map(|iso| utils::polygon_to_geojson_string(iso))
+        .collect())
 }
 
 /// Python module for quickly creating isochrones
@@ -74,4 +69,3 @@ fn pysochrone(_py: Python, m: &PyModule) -> pyo3::PyResult<()> {
     m.add_function(wrap_pyfunction!(calc_isochrones, m)?)?;
     Ok(())
 }
-

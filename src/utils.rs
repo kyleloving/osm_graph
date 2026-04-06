@@ -22,11 +22,13 @@ pub fn calculate_travel_time(length: f64, speed_kph: f64) -> f64 {
 }
 
 pub fn polygon_to_geojson(polygon: &Polygon<f64>) -> GeoJson {
+    // node_to_latlon returns (lat, lon) tuples which geo stores as (x=lat, y=lon).
+    // GeoJSON spec requires [longitude, latitude], so coord.y = lon, coord.x = lat.
     let exterior_coords = polygon
         .exterior()
         .0
         .iter()
-        .map(|coord| vec![coord.y, coord.x])
+        .map(|coord| vec![coord.y, coord.x]) // [lon, lat] per GeoJSON spec
         .collect::<Vec<_>>();
 
     let geojson_polygon = Geometry::new(Value::Polygon(vec![exterior_coords]));

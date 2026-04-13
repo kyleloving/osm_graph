@@ -78,11 +78,11 @@ isochrones = pysochrone.calc_isochrones(
 
 Compute-only benchmark (cached graph, no network), Munich, median of 5 runs:
 
-  Radius   pysochrone        osmnx    Speedup
-----------------------------------------------
-   5000m       0.123s      10.522s      85.6x
-  10000m       0.311s      25.126s      80.7x
-  20000m       0.860s      69.538s      80.9x
+  Radius    Nodes    Edges   pysochrone        osmnx    Speedup
+--------------------------------------------------------------
+   5000m     6251    15356       0.150s      13.592s      90.5x
+  10000m    16183    41601       0.347s      32.089s      92.5x
+  20000m    32501    82385       0.794s     166.107s     209.3x
 
 Benchmarked on Intel Core i7-11370H. Reproducing: `python benchmarks/comparison.py`
 

@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html>
+<head>
+    
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+    
+        <script>
+            L_NO_TOUCH = false;
+            L_DISABLE_3D = false;
+        </script>
+    
+    <style>html, body {width: 100%;height: 100%;margin: 0;padding: 0;}</style>
+    <style>#map {position:absolute;top:0;bottom:0;right:0;left:0;}</style>
+    <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.js"></script>
+    <script src="https://code.jquery.com/jquery-1.12.4.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/css/bootstrap.min.css"/>
+    <link rel="stylesheet" href="https://netdna.bootstrapcdn.com/bootstrap/3.0.0/css/bootstrap.min.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.2.0/css/all.min.css"/>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/python-visualization/folium/folium/templates/leaflet.awesome.rotate.min.css"/>
+    
+            <meta name="viewport" content="width=device-width,
+                initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+            <style>
+                #map_23108380e09fd5de44ef1cbcc755bfef {
+                    position: relative;
+                    width: 100.0%;
+                    height: 100.0%;
+                    left: 0.0%;
+                    top: 0.0%;
+                }
+                .leaflet-container { font-size: 1rem; }
+            </style>
+        
+</head>
+<body>
+    
+    
+            <div class="folium-map" id="map_23108380e09fd5de44ef1cbcc755bfef" ></div>
+        
+</body>
+<script>
+    
+    
+            var map_23108380e09fd5de44ef1cbcc755bfef = L.map(
+                "map_23108380e09fd5de44ef1cbcc755bfef",
+                {
+                    center: [48.1371436, 11.5753989],
+                    crs: L.CRS.EPSG3857,
+                    zoom: 13,
+                    zoomControl: true,
+                    preferCanvas: false,
+                }
+            );
+
+            
+
+        
+    
+            var tile_layer_122e6fd40c258aa5e9c650d0552b0550 = L.tileLayer(
+                "https://cartodb-basemaps-{s}.global.ssl.fastly.net/light_all/{z}/{x}/{y}.png",
+                {"attribution": "\u0026copy; \u003ca target=\"_blank\" href=\"http://www.openstreetmap.org/copyright\"\u003eOpenStreetMap\u003c/a\u003e contributors \u0026copy; \u003ca target=\"_blank\" href=\"http://cartodb.com/attributions\"\u003eCartoDB\u003c/a\u003e, CartoDB \u003ca target=\"_blank\" href =\"http://cartodb.com/attributions\"\u003eattributions\u003c/a\u003e", "detectRetina": false, "maxNativeZoom": 18, "maxZoom": 18, "minZoom": 0, "noWrap": false, "opacity": 1, "subdomains": "abc", "tms": false}
+            ).addTo(map_23108380e09fd5de44ef1cbcc755bfef);
+        
+    
+            var marker_7a43bafcd458121c1f9b2dbc9fae1235 = L.marker(
+                [48.1371436, 11.5753989],
+                {}
+            ).addTo(map_23108380e09fd5de44ef1cbcc755bfef);
+        
+    
+            var icon_c0e34a5d3d3437589ec8ac3f4f4dd644 = L.AwesomeMarkers.icon(
+                {"extraClasses": "fa-rotate-0", "icon": "info-sign", "iconColor": "white", "markerColor": "green", "prefix": "glyphicon"}
+            );
+            marker_7a43bafcd458121c1f9b2dbc9fae1235.setIcon(icon_c0e34a5d3d3437589ec8ac3f4f4dd644);
+        
+    
+            marker_7a43bafcd458121c1f9b2dbc9fae1235.bindTooltip(
+                `<div>
+                     Marienplatz, Munich, Germany
+                 </div>`,
+                {"sticky": true}
+            );
+        
+    
+            var marker_2c367e0abf385783e05e4da9455db07a = L.marker(
+                [48.164861, 11.6064042],
+                {}
+            ).addTo(map_23108380e09fd5de44ef1cbcc755bfef);
+        
+    
+            var icon_900b569366a29a0d9f71b442f96f737a = L.AwesomeMarkers.icon(
+                {"extraClasses": "fa-rotate-0", "icon": "info-sign", "iconColor": "white", "markerColor": "red", "prefix": "glyphicon"}
+            );
+            marker_2c367e0abf385783e05e4da9455db07a.setIcon(icon_900b569366a29a0d9f71b442f96f737a);
+        
+    
+            marker_2c367e0abf385783e05e4da9455db07a.bindTooltip(
+                `<div>
+                     English Garden, Munich, Germany
+                 </div>`,
+                {"sticky": true}
+            );
+        
+    
+        function geo_json_c52994c4abe075bb544c51a5c1d1438d_styler(feature) {
+            switch(feature.id) {
+                default:
+                    return {"color": "blue", "weight": 4};
+            }
+        }
+
+        function geo_json_c52994c4abe075bb544c51a5c1d1438d_onEachFeature(feature, layer) {
+            layer.on({
+            });
+        };
+        var geo_json_c52994c4abe075bb544c51a5c1d1438d = L.geoJson(null, {
+                onEachFeature: geo_json_c52994c4abe075bb544c51a5c1d1438d_onEachFeature,
+            
+                style: geo_json_c52994c4abe075bb544c51a5c1d1438d_styler,
+        });
+
+        function geo_json_c52994c4abe075bb544c51a5c1d1438d_add (data) {
+            geo_json_c52994c4abe075bb544c51a5c1d1438d
+                .addData(data)
+                .addTo(map_23108380e09fd5de44ef1cbcc755bfef);
+        }
+            geo_json_c52994c4abe075bb544c51a5c1d1438d_add({"features": [{"geometry": {"coordinates": [[11.5747444, 48.1362556], [11.5745188, 48.1361601], [11.5734454, 48.1357649], [11.5731532, 48.1337422], [11.573553, 48.1334688], [11.5742832, 48.13296175], [11.5749072, 48.1333265], [11.576227249999999, 48.13318635], [11.5762683, 48.133193250000005], [11.5796408, 48.133970950000005], [11.58158775, 48.1337134], [11.5815365, 48.1334323], [11.5821569, 48.1336897], [11.582752866666667, 48.13387456666666], [11.58291425, 48.133921150000006], [11.583467599999999, 48.13408995], [11.585061966666666, 48.134339366666666], [11.5852736, 48.13434705], [11.586096466666666, 48.13451333333333], [11.5870373, 48.1342438], [11.5881047, 48.1354], [11.588644, 48.1361498], [11.5892238, 48.136907], [11.5897365, 48.13724915], [11.5900869, 48.137472], [11.5912287, 48.1381774], [11.5922314, 48.1387939], [11.5938096, 48.1403921], [11.5944693, 48.1418543], [11.5951675, 48.1439207], [11.595486, 48.1452688], [11.5957509, 48.1464602], [11.5959884, 48.1476254], [11.5960844, 48.1478204], [11.597669233333335, 48.14957416666667], [11.5997092, 48.152017], [11.6008633, 48.1534661], [11.600952, 48.1535775], [11.6020637, 48.1550141], [11.6014138, 48.1598729], [11.600912, 48.1603748], [11.600894, 48.1606836], [11.601616, 48.1602873], [11.6100907, 48.1664149]], "type": "LineString"}, "id": "0", "properties": {"distance_m": 6109.58034044998, "duration_s": 505.3216195901408}, "type": "Feature"}], "type": "FeatureCollection"});
+
+        
+    
+            var layer_control_44aba9f369517403466dbcd05e96e4ef = {
+                base_layers : {
+                    "cartodbpositron" : tile_layer_122e6fd40c258aa5e9c650d0552b0550,
+                },
+                overlays :  {
+                    "Route" : geo_json_c52994c4abe075bb544c51a5c1d1438d,
+                },
+            };
+            L.control.layers(
+                layer_control_44aba9f369517403466dbcd05e96e4ef.base_layers,
+                layer_control_44aba9f369517403466dbcd05e96e4ef.overlays,
+                {"autoZIndex": true, "collapsed": true, "position": "topright"}
+            ).addTo(map_23108380e09fd5de44ef1cbcc755bfef);
+        
+</script>
+</html>

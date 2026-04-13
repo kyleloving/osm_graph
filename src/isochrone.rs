@@ -106,14 +106,25 @@ fn calculate_isochrones_concurrently(
 pub async fn calculate_isochrones_from_point(
     lat: f64,
     lon: f64,
-    max_dist: f64,
+    max_dist: Option<f64>,
     time_limits: Vec<f64>,
     network_type: overpass::NetworkType,
     hull_type: HullType,
     retain_all: bool,
 ) -> Result<(Vec<Polygon>, SpatialGraph), OsmGraphError> {
 
-    let polygon_coord_str = overpass::bbox_from_point(lat, lon, max_dist);
+    // Auto-size bounding box if not provided.
+    // Use max time limit * a generous speed + 20% buffer to ensure the
+    // isochrone never saturates into a square at the bbox boundary.
+    let max_speed_m_per_s = match network_type {
+        NetworkType::Walk => 5.0 / 3.6,
+        NetworkType::Bike => 25.0 / 3.6,
+        _ => 120.0 / 3.6,
+    };
+    let max_time = time_limits.iter().cloned().fold(0.0_f64, f64::max);
+    let computed_dist = max_dist.unwrap_or_else(|| max_time * max_speed_m_per_s * 1.2);
+
+    let polygon_coord_str = overpass::bbox_from_point(lat, lon, computed_dist);
     let query = overpass::create_overpass_query(&polygon_coord_str, network_type);
     let graph_key = format!("{}:{}", query, retain_all);
 

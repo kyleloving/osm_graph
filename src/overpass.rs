@@ -35,7 +35,7 @@ pub fn get_osm_filter(network_type: NetworkType) -> Result<&'static str, Overpas
             "[\"highway\"][\"area\"!~\"yes\"][\"highway\"!~\"abandoned|bridleway|bus_guideway|construction|corridor|cycleway|elevator|escalator|footway|no|path|pedestrian|planned|platform|proposed|raceway|razed|steps|track\"][\"motor_vehicle\"!~\"no\"][\"motorcar\"!~\"no\"][\"service\"!~\"emergency_access|parking|parking_aisle|private\"]"
         ),
         NetworkType::Walk => Ok(
-            "[\"highway\"][\"area\"!~\"yes\"][\"highway\"!~\"abandoned|bus_guideway|construction|corridor|elevator|escalator|footway|motor|no|planned|platform|proposed|raceway|razed|steps\"][\"bicycle\"!~\"no\"][\"service\"!~\"private\"]"
+            "[\"highway\"][\"area\"!~\"yes\"][\"highway\"!~\"abandoned|bus_guideway|construction|corridor|elevator|escalator|motor|no|planned|platform|proposed|raceway|razed\"][\"foot\"!~\"no\"][\"service\"!~\"private\"]"
         ),
         NetworkType::Bike => Ok(
             "[\"highway\"][\"area\"!~\"yes\"][\"highway\"!~\"abandoned|bus_guideway|construction|corridor|elevator|escalator|footway|motor|no|planned|platform|proposed|raceway|razed|steps\"][\"bicycle\"!~\"no\"][\"service\"!~\"private\"]"

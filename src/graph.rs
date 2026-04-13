@@ -175,17 +175,27 @@ pub fn create_graph(
     // Add distance as edge weights
     add_edge_lengths(&mut graph);
 
-    // Add travel time as edge weights
-    // Assign default highway speeds
+    // Standard OSM highway type speeds (kph), based on typical urban defaults.
+    // These apply when no maxspeed tag is present.
     let hwy_speeds = HashMap::from([
-        ("school zone".to_string(), 30.0),
-        ("urban".to_string(), 30.0),
-        ("residential".to_string(), 50.0),
-        ("rural".to_string(), 88.5),
-        ("motorway".to_string(), 88.5),
-        ("highway".to_string(), 88.5), // ... other highway types and their typical speeds
+        ("motorway".to_string(),       110.0),
+        ("motorway_link".to_string(),   60.0),
+        ("trunk".to_string(),           90.0),
+        ("trunk_link".to_string(),      45.0),
+        ("primary".to_string(),         65.0),
+        ("primary_link".to_string(),    45.0),
+        ("secondary".to_string(),       55.0),
+        ("secondary_link".to_string(),  40.0),
+        ("tertiary".to_string(),        45.0),
+        ("tertiary_link".to_string(),   35.0),
+        ("unclassified".to_string(),    45.0),
+        ("residential".to_string(),     30.0),
+        ("living_street".to_string(),   10.0),
+        ("service".to_string(),         20.0),
+        ("track".to_string(),           20.0),
+        ("road".to_string(),            50.0),
     ]);
-    let fallback_speed = 50.0; // Fallback speed in kph
+    let fallback_speed = 50.0;
 
     add_edge_speeds(&mut graph, &hwy_speeds, fallback_speed);
     add_edge_travel_times(&mut graph);

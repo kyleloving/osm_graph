@@ -25,7 +25,7 @@ async fn main() -> Result<(), OsmGraphError> {
     println!("Running WITHOUT simplification...");
     let start = Instant::now();
     let (_, unsimplified_sg) = isochrone::calculate_isochrones_from_point(
-        lat, lon, max_dist,
+        lat, lon, Some(max_dist),
         time_limits.clone(),
         network_type,
         hull_type,
@@ -45,7 +45,7 @@ async fn main() -> Result<(), OsmGraphError> {
     println!("Running WITH simplification...");
     let start = Instant::now();
     let (_, simplified_sg) = isochrone::calculate_isochrones_from_point(
-        lat, lon, max_dist,
+        lat, lon, Some(max_dist),
         time_limits.clone(),
         network_type,
         hull_type,

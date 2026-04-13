@@ -8,6 +8,7 @@ pub enum OsmGraphError {
     EmptyGraph,
     NodeNotFound,
     LockPoisoned,
+    GeocodingFailed(String),
 }
 
 impl std::fmt::Display for OsmGraphError {
@@ -18,6 +19,7 @@ impl std::fmt::Display for OsmGraphError {
             OsmGraphError::EmptyGraph => write!(f, "Graph is empty"),
             OsmGraphError::NodeNotFound => write!(f, "No node found near the given coordinates"),
             OsmGraphError::LockPoisoned => write!(f, "Internal cache lock was poisoned"),
+            OsmGraphError::GeocodingFailed(place) => write!(f, "Could not geocode '{}'", place),
         }
     }
 }

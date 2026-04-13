@@ -3,15 +3,16 @@
 
 This library provides a set of tools for generating isochrones and reverse isochrones from geographic coordinates. It leverages OpenStreetMap data to construct road networks and calculate areas accessible within specified time limits. The library is designed for both Rust and Python, offering high performance and easy integration into data science workflows.
 
-![Isochrones](image.png)
+![Isochrones](isochrones.png)
 
 ## Features
 - Graph Construction: Parses OpenStreetMap data to construct a graph representing the road network.
-- Isochrone Calculation: Generates isochrones, areas reachable within a given time frame from a start point, using Dijkstra's algorithm.
-- Reverse Isochrone Calculation: Determines areas from which a point can be reached within a given time frame.
+- Graph Simplification: Topologically simplifies the graph by collapsing linear chains and deduplicating parallel edges, reducing node/edge count by ~89% for faster downstream computation.
+- Spatial Indexing: R-tree spatial index for O(log n) nearest-node lookups, built once and reused for all queries.
+- Isochrone Calculation: Generates isochrones using a single Dijkstra traversal, with hull computation parallelized across time limits.
 - Concave and Convex Hulls: Supports generating both concave and convex hulls around isochrones for more accurate or simplified geographical shapes.
-- Caching: Implements caching mechanisms to store and retrieve pre-calculated graphs for faster access.
-Python Integration: Offers Python bindings to use the library's functionalities directly in Python scripts, notebooks, and applications.
+- Caching: Two-level cache (raw OSM XML + built graphs) so repeated queries for the same area require no network calls.
+- Python Integration: Offers Python bindings to use the library's functionalities directly in Python scripts, notebooks, and applications.
 - Concurrency Support: Utilizes Rust's concurrency features for efficient isochrone calculation over large datasets.
 - GeoJSON Output: Converts isochrones into GeoJSON format for easy visualization and integration with mapping tools.
 
@@ -38,16 +39,19 @@ maturin develop
 ## Usage
 Rust
 ```rust
-use osm_graph::{calculate_isochrones_from_point, HullType};
+use osm_graph::isochrone::{calculate_isochrones_from_point, HullType};
+use osm_graph::overpass::NetworkType;
 
+#[tokio::main]
 async fn main() {
-    let isochrone = isochrone::calculate_isochrones_from_point(
+    let (isochrones, _graph) = calculate_isochrones_from_point(
         48.123456,
         11.123456,
         10_000.0,
         vec![300.0, 600.0, 900.0, 1_200.0, 1_500.0, 1_800.0],
-        overpass::NetworkType::Drive,
-        isochrone::HullType::Convex,
+        NetworkType::Drive,
+        HullType::Convex,
+        false, // false = simplified graph (faster), true = full graph
     )
     .await
     .unwrap();
@@ -60,20 +64,21 @@ Python
 import pysochrone
 
 isochrones = pysochrone.calc_isochrones(
-    48.123456, 
-    11.123456, 
-    5000, 
-    [600, 1200, 1800], 
-    "Drive", 
-    "Convex"
+    48.123456,   # lat
+    11.123456,   # lon
+    10_000,      # bounding box radius in meters
+    [300, 600, 900, 1200, 1500, 1800],  # time limits in seconds
+    "Drive",     # network type: Drive | DriveService | Walk | Bike | All | AllPrivate
+    "Concave",   # hull type: Convex | FastConcave | Concave
+    False,       # optional: False = simplified (default), True = full graph
 )
 ```
 
 ## Roadmap
 - [ ] Testing and benchmarks.
 - [ ] Customizable Speed Limits: Allow users to specify custom speed limits for different road types.
-- [✓] Support for Pedestrian and Bicycle Networks: Expand the graph construction to support pedestrian and bicycle network types.
-- [ ] Topological simplification of osm graphs for more efficient downstream analytics.
+- [x] Support for Pedestrian and Bicycle Networks: Expand the graph construction to support pedestrian and bicycle network types.
+- [x] Topological simplification of osm graphs for more efficient downstream analytics.
 - [ ] Additional Roadnetwork analytics.
 - [ ] Routing engine.
 - [ ] Advanced Caching Strategies: Implement more sophisticated caching mechanisms for dynamic query parameters.

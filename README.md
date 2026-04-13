@@ -74,6 +74,18 @@ isochrones = pysochrone.calc_isochrones(
 )
 ```
 
+## Performance
+
+Compute-only benchmark (cached graph, no network), Munich, median of 5 runs:
+
+  Radius   pysochrone        osmnx    Speedup
+----------------------------------------------
+   5000m       0.123s      10.522s      85.6x
+  10000m       0.311s      25.126s      80.7x
+  20000m       0.860s      69.538s      80.9x
+
+Benchmarked on Intel Core i7-11370H. Reproducing: `python benchmarks/comparison.py`
+
 ## Roadmap
 - [ ] Testing and benchmarks.
 - [ ] Customizable Speed Limits: Allow users to specify custom speed limits for different road types.

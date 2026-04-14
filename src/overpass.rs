@@ -55,9 +55,9 @@ pub fn create_overpass_query(polygon_coord_str: &str, network_type: NetworkType)
     format!("[out:xml];(way{}({});>;);out;", filter, polygon_coord_str)
 }
 
-// Reuse a single reqwest::Client for multiple requests
+// Reuse a single reqwest::Client across all HTTP calls in the library
 lazy_static::lazy_static! {
-    static ref CLIENT: reqwest::Client = reqwest::Client::new();
+    pub(crate) static ref CLIENT: reqwest::Client = reqwest::Client::new();
 }
 
 // Function to make request to Overpass API
@@ -77,7 +77,7 @@ pub async fn make_request(url: &str, query: &str) -> Result<String, reqwest::Err
     }
 }
 
-// Function to construct a bounding box from a single lat/lon pair
+/// Construct a `south,west,north,east` bounding box string from a point and radius.
 pub fn bbox_from_point(lat: f64, lon: f64, dist: f64) -> String {
     const EARTH_RADIUS_M: f64 = 6_371_009.0;
 
@@ -94,4 +94,27 @@ pub fn bbox_from_point(lat: f64, lon: f64, dist: f64) -> String {
 
     // Construct polygon_coord_str for Overpass API query
     format!("{},{},{},{}", south, west, north, east)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_bbox_is_symmetric() {
+        let bbox = bbox_from_point(48.0, 11.0, 1000.0);
+        let parts: Vec<f64> = bbox.split(',').map(|s| s.parse().unwrap()).collect();
+        let (south, west, north, east) = (parts[0], parts[1], parts[2], parts[3]);
+        assert!((48.0 - south - (north - 48.0)).abs() < 1e-6);
+        assert!((11.0 - west - (east - 11.0)).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_bbox_larger_dist_gives_larger_box() {
+        let small = bbox_from_point(48.0, 11.0, 1_000.0);
+        let large = bbox_from_point(48.0, 11.0, 10_000.0);
+        let small_parts: Vec<f64> = small.split(',').map(|s| s.parse().unwrap()).collect();
+        let large_parts: Vec<f64> = large.split(',').map(|s| s.parse().unwrap()).collect();
+        assert!(large_parts[2] > small_parts[2]);
+    }
 }

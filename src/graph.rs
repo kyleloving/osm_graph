@@ -1,6 +1,7 @@
 use petgraph::graph::{DiGraph, NodeIndex};
 use serde::Deserialize;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
+use std::sync::Arc;
 use crate::utils::{calculate_distance, calculate_travel_time};
 use crate::simplify::simplify_graph;
 use rstar::{RTree, RTreeObject, AABB, PointDistance};
@@ -47,29 +48,17 @@ pub struct XmlWay {
 }
 
 impl XmlWay {
-    pub fn filter_useful_tags(&self) -> Self {
-        static USEFUL_TAGS: &[&str] = &[
+    pub fn filter_useful_tags(self) -> Self {
+        const USEFUL_TAGS: &[&str] = &[
             "bridge", "tunnel", "oneway", "lanes", "ref", "name",
             "highway", "maxspeed", "service", "access", "area",
             "landuse", "width", "est_width", "junction",
         ];
-        let useful_tags_set: HashSet<&str> = USEFUL_TAGS.iter().copied().collect();
-
-        let filtered_tags: Vec<XmlTag> = self.tags.iter()
-            .filter(|tag| useful_tags_set.contains(tag.key.as_str()))
-            .cloned()
+        // Linear search on 15-element static slice — no HashSet allocation needed.
+        let tags = self.tags.into_iter()
+            .filter(|tag| USEFUL_TAGS.iter().any(|&k| k == tag.key.as_str()))
             .collect();
-
-        XmlWay {
-            id: self.id,
-            nodes: self.nodes.clone(),
-            tags: filtered_tags,
-            length: self.length,
-            speed_kph: self.speed_kph,
-            walk_travel_time: self.walk_travel_time,
-            bike_travel_time: self.bike_travel_time,
-            drive_travel_time: self.drive_travel_time,
-        }
+        XmlWay { tags, ..self }
     }
 }
 
@@ -141,16 +130,20 @@ pub fn create_graph(
 
     // Add nodes to the graph and keep track of their indices
     for node in nodes {
-        let node_index = graph.add_node(node.clone());
-        node_index_map.insert(node.id, node_index);
+        let id = node.id;
+        let node_index = graph.add_node(node); // move — no clone needed, nodes is already owned
+        node_index_map.insert(id, node_index);
     }
 
     // Add edges to the graph
-    for way in ways {
+    for mut way in ways {
+        // Extract node refs before consuming `way` so that edge weights are stored
+        // without the construction-only node list (saves memory for every edge in the graph).
+        let node_refs = std::mem::take(&mut way.nodes);
         let filtered_way = way.filter_useful_tags();
         let path_direction = assess_path_directionality(&filtered_way);
 
-        for window in filtered_way.nodes.windows(2) {
+        for window in node_refs.windows(2) {
             if let [start_ref, end_ref] = window {
                 let (start_index, end_index) = if path_direction.is_reversed {
                     (
@@ -208,29 +201,6 @@ pub fn create_graph(
     // ... other future logic
 
     graph
-}
-
-fn build_path(
-    graph: &DiGraph<XmlNode, XmlWay>,
-    start: NodeIndex,
-    endpoints: &HashSet<NodeIndex>,
-) -> Vec<NodeIndex> {
-    let mut path = vec![start];
-    let mut current = start;
-
-    while !endpoints.contains(&current) {
-        if let Some(successor) = graph
-            .neighbors_directed(current, petgraph::Outgoing)
-            .find(|&n| !path.contains(&n))
-        {
-            path.push(successor);
-            current = successor;
-        } else {
-            break;
-        }
-    }
-
-    path
 }
 
 fn add_edge_lengths(graph: &mut DiGraph<XmlNode, XmlWay>) {
@@ -325,10 +295,11 @@ impl PointDistance for NodeEntry {
 
 /// A graph bundled with a spatial index for O(log n) nearest-node queries.
 /// Build once via `SpatialGraph::new`, reuse for all lookups and routing.
+/// Both inner fields are reference-counted, so cloning a `SpatialGraph` is O(1).
 #[derive(Clone)]
 pub struct SpatialGraph {
-    pub graph: DiGraph<XmlNode, XmlWay>,
-    tree: RTree<NodeEntry>,
+    pub graph: Arc<DiGraph<XmlNode, XmlWay>>,
+    tree: Arc<RTree<NodeEntry>>,
 }
 
 impl SpatialGraph {
@@ -336,7 +307,8 @@ impl SpatialGraph {
         let entries = graph.node_indices()
             .map(|i| NodeEntry { point: [graph[i].lat, graph[i].lon], index: i })
             .collect();
-        let tree = RTree::bulk_load(entries);
+        let tree = Arc::new(RTree::bulk_load(entries));
+        let graph = Arc::new(graph);
         Self { graph, tree }
     }
 
@@ -348,4 +320,57 @@ impl SpatialGraph {
 // Keep the free function for backwards compatibility but delegate to SpatialGraph
 pub fn latlon_to_node(graph: &DiGraph<XmlNode, XmlWay>, lat: f64, lon: f64) -> Option<NodeIndex> {
     SpatialGraph::new(graph.clone()).nearest_node(lat, lon)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_node(id: i64, lat: f64, lon: f64) -> XmlNode {
+        XmlNode { id, lat, lon, tags: vec![], geohash: None }
+    }
+
+    fn make_way_raw(node_ids: Vec<i64>, tags: Vec<(&str, &str)>) -> XmlWay {
+        XmlWay {
+            id: 1,
+            nodes: node_ids.into_iter().map(|id| XmlNodeRef { node_id: id }).collect(),
+            tags: tags.into_iter().map(|(k, v)| XmlTag { key: k.into(), value: v.into() }).collect(),
+            length: 0.0, speed_kph: 0.0,
+            walk_travel_time: 0.0, bike_travel_time: 0.0, drive_travel_time: 0.0,
+        }
+    }
+
+    #[test]
+    fn test_graph_respects_maxspeed_tag() {
+        let nodes = vec![make_node(1, 0.0, 0.0), make_node(2, 0.001, 0.0)];
+        let way = make_way_raw(vec![1, 2], vec![("highway", "residential"), ("maxspeed", "30")]);
+        let graph = create_graph(vec![nodes[0].clone(), nodes[1].clone()], vec![way], true, false);
+        assert_eq!(graph.edge_weights().next().unwrap().speed_kph, 30.0);
+    }
+
+    #[test]
+    fn test_oneway_produces_single_edge() {
+        let nodes = vec![make_node(1, 0.0, 0.0), make_node(2, 0.001, 0.0)];
+        let way = make_way_raw(vec![1, 2], vec![("highway", "residential"), ("oneway", "yes")]);
+        let graph = create_graph(vec![nodes[0].clone(), nodes[1].clone()], vec![way], true, false);
+        assert_eq!(graph.edge_count(), 1);
+    }
+
+    #[test]
+    fn test_bidirectional_produces_two_edges() {
+        let nodes = vec![make_node(1, 0.0, 0.0), make_node(2, 0.001, 0.0)];
+        let way = make_way_raw(vec![1, 2], vec![("highway", "residential")]);
+        let graph = create_graph(vec![nodes[0].clone(), nodes[1].clone()], vec![way], true, false);
+        assert_eq!(graph.edge_count(), 2);
+    }
+
+    #[test]
+    fn test_nearest_node_finds_closest() {
+        let mut graph = DiGraph::new();
+        graph.add_node(make_node(1, 48.0, 11.0));
+        graph.add_node(make_node(2, 52.0, 13.0));
+        let sg = SpatialGraph::new(graph);
+        let idx = sg.nearest_node(48.001, 11.001).unwrap();
+        assert_eq!(sg.graph[idx].id, 1);
+    }
 }

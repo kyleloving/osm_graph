@@ -9,6 +9,8 @@ pub enum OsmGraphError {
     NodeNotFound,
     LockPoisoned,
     GeocodingFailed(String),
+    InvalidInput(String),
+    Io(std::io::Error),
 }
 
 impl std::fmt::Display for OsmGraphError {
@@ -20,6 +22,8 @@ impl std::fmt::Display for OsmGraphError {
             OsmGraphError::NodeNotFound => write!(f, "No node found near the given coordinates"),
             OsmGraphError::LockPoisoned => write!(f, "Internal cache lock was poisoned"),
             OsmGraphError::GeocodingFailed(place) => write!(f, "Could not geocode '{}'", place),
+            OsmGraphError::InvalidInput(msg) => write!(f, "Invalid input: {}", msg),
+            OsmGraphError::Io(e) => write!(f, "IO error: {}", e),
         }
     }
 }
@@ -35,6 +39,12 @@ impl From<reqwest::Error> for OsmGraphError {
 impl From<quick_xml::DeError> for OsmGraphError {
     fn from(e: quick_xml::DeError) -> Self {
         OsmGraphError::XmlParse(e)
+    }
+}
+
+impl From<std::io::Error> for OsmGraphError {
+    fn from(e: std::io::Error) -> Self {
+        OsmGraphError::Io(e)
     }
 }
 

@@ -7,7 +7,6 @@ mod utils;
 mod cache;
 mod simplify;
 mod error;
-mod tests;
 
 use std::time::Instant;
 use error::OsmGraphError;

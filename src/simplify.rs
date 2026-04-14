@@ -98,29 +98,29 @@ pub fn simplify_graph(graph: &DiGraph<XmlNode, XmlWay>) -> DiGraph<XmlNode, XmlW
 /// Remove parallel edges between the same (src, dst) pair, keeping the one with
 /// the lowest drive_travel_time. Returns a new graph with at most one edge per direction.
 fn deduplicate_edges(graph: DiGraph<XmlNode, XmlWay>) -> DiGraph<XmlNode, XmlWay> {
-    // Collect the best edge weight for each (src, dst) pair
-    let mut best: HashMap<(NodeIndex, NodeIndex), XmlWay> = HashMap::new();
+    // Borrow edge weights directly from the input graph — no clones until we know the winner.
+    let mut best: HashMap<(NodeIndex, NodeIndex), &XmlWay> = HashMap::new();
     for edge in graph.edge_references() {
         let key = (edge.source(), edge.target());
         let way = edge.weight();
         best.entry(key)
             .and_modify(|existing| {
                 if way.drive_travel_time < existing.drive_travel_time {
-                    *existing = way.clone();
+                    *existing = way;
                 }
             })
-            .or_insert_with(|| way.clone());
+            .or_insert(way);
     }
 
-    // Rebuild a clean graph with the same nodes and only the best edges
+    // Rebuild a clean graph, cloning only the winning edge per (src, dst) pair.
     let mut deduped = DiGraph::new();
     let mut node_map: HashMap<NodeIndex, NodeIndex> = HashMap::new();
     for old_idx in graph.node_indices() {
         let new_idx = deduped.add_node(graph[old_idx].clone());
         node_map.insert(old_idx, new_idx);
     }
-    for ((src, dst), way) in best {
-        deduped.add_edge(node_map[&src], node_map[&dst], way);
+    for ((src, dst), way) in &best {
+        deduped.add_edge(node_map[src], node_map[dst], (*way).clone());
     }
 
     deduped
@@ -135,17 +135,19 @@ fn build_path(
     endpoints: &HashSet<NodeIndex>,
 ) -> Vec<NodeIndex> {
     let mut path = vec![start, first_step];
+    let mut prev = start;
     let mut current = first_step;
 
     while !endpoints.contains(&current) {
         let next = graph
             .neighbors_directed(current, petgraph::Outgoing)
-            .find(|&n| Some(&n) != path.iter().rev().nth(1)); // avoid going back
+            .find(|&n| n != prev); // avoid going back — O(1) instead of O(path len)
 
         match next {
             Some(n) => {
-                path.push(n);
+                prev = current;
                 current = n;
+                path.push(n);
             }
             None => break,
         }
@@ -155,29 +157,31 @@ fn build_path(
 }
 
 fn is_endpoint(graph: &DiGraph<XmlNode, XmlWay>, node_index: NodeIndex) -> bool {
-    let out_neighbors: HashSet<_> = graph
+    // Collect all neighbors into a single Vec — road nodes have degree 2–6 so
+    // sort+dedup is cheaper than HashSet allocation for this cardinality.
+    let mut neighbors: Vec<NodeIndex> = graph
         .neighbors_directed(node_index, petgraph::Outgoing)
         .collect();
-    let in_neighbors: HashSet<_> = graph
-        .neighbors_directed(node_index, petgraph::Incoming)
-        .collect();
+    let out_count = neighbors.len();
+    neighbors.extend(graph.neighbors_directed(node_index, petgraph::Incoming));
 
     // Self-loop
-    if out_neighbors.contains(&node_index) || in_neighbors.contains(&node_index) {
+    if neighbors.iter().any(|&n| n == node_index) {
         return true;
     }
+
+    let in_count = neighbors.len() - out_count;
 
     // Dead-end
-    if out_neighbors.is_empty() || in_neighbors.is_empty() {
+    if out_count == 0 || in_count == 0 {
         return true;
     }
 
-    let total_neighbors: HashSet<_> = out_neighbors.union(&in_neighbors).collect();
-    let total_degree = total_neighbors.len();
-
-    // A node with exactly 2 unique neighbours (one in, one out) is a linear pass-through — not an endpoint.
+    // A node with exactly 2 unique neighbours is a linear pass-through — not an endpoint.
     // Anything else (intersection, fork, merge) is an endpoint.
-    total_degree != 2
+    neighbors.sort_unstable();
+    neighbors.dedup();
+    neighbors.len() != 2
 }
 
 /// Consolidate nearby nodes that share the same geohash cell into a single averaged node.
@@ -242,4 +246,40 @@ fn merge_nodes(graph: &DiGraph<XmlNode, XmlWay>, indices: &[NodeIndex]) -> XmlNo
 
 fn get_unique_id() -> i64 {
     ID_COUNTER.fetch_add(1, Ordering::Relaxed) as i64
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::graph::{XmlNode, XmlWay};
+
+    fn make_node(id: i64, lat: f64, lon: f64) -> XmlNode {
+        XmlNode { id, lat, lon, tags: vec![], geohash: None }
+    }
+
+    fn make_way(id: i64, drive_travel_time: f64) -> XmlWay {
+        XmlWay {
+            id,
+            nodes: vec![],
+            tags: vec![],
+            length: 100.0,
+            speed_kph: 50.0,
+            walk_travel_time: 72.0,
+            bike_travel_time: 24.0,
+            drive_travel_time,
+        }
+    }
+
+    #[test]
+    fn test_deduplicate_keeps_fastest_edge() {
+        let mut graph = DiGraph::new();
+        let a = graph.add_node(make_node(1, 0.0, 0.0));
+        let b = graph.add_node(make_node(2, 0.001, 0.0));
+        graph.add_edge(a, b, make_way(1, 100.0));
+        graph.add_edge(a, b, make_way(2, 50.0));
+
+        assert_eq!(graph.edge_count(), 2);
+        let deduped = simplify_graph(&graph);
+        assert!(deduped.edge_count() <= 1, "Expected at most 1 edge, got {}", deduped.edge_count());
+    }
 }

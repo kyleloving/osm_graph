@@ -7,11 +7,16 @@ mod utils;
 mod cache;
 mod simplify;
 mod error;
-mod tests;
 mod routing;
 mod geocoding;
+mod poi;
 
 use pyo3::prelude::*;
+
+lazy_static::lazy_static! {
+    static ref TOKIO_RT: tokio::runtime::Runtime =
+        tokio::runtime::Runtime::new().expect("failed to create tokio runtime");
+}
 
 /// Calculates isochrones from a point
 #[pyfunction]
@@ -46,10 +51,7 @@ fn calc_isochrones(
         )),
     };
 
-    let rt = tokio::runtime::Runtime::new()
-        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
-
-    let (isochrones, _) = rt
+    let (isochrones, _) = TOKIO_RT
         .block_on(isochrone::calculate_isochrones_from_point(
             lat,
             lon,
@@ -90,9 +92,6 @@ fn calc_route(
         )),
     };
 
-    let rt = tokio::runtime::Runtime::new()
-        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
-
     // Use the midpoint as the query origin, with max_dist covering both points
     let mid_lat = (origin_lat + dest_lat) / 2.0;
     let mid_lon = (origin_lon + dest_lon) / 2.0;
@@ -101,7 +100,7 @@ fn calc_route(
     let straight_line = utils::calculate_distance(origin_lat, origin_lon, dest_lat, dest_lon);
     let computed_dist = max_dist.unwrap_or_else(|| (straight_line * 1.5).max(5_000.0));
 
-    let (_, sg) = rt
+    let (_, sg) = TOKIO_RT
         .block_on(isochrone::calculate_isochrones_from_point(
             mid_lat, mid_lon, Some(computed_dist),
             vec![],
@@ -121,6 +120,12 @@ fn calc_route(
     let mut props = geojson::JsonObject::new();
     props.insert("distance_m".to_string(), route.distance_m.into());
     props.insert("duration_s".to_string(), route.duration_s.into());
+    props.insert(
+        "cumulative_times_s".to_string(),
+        geojson::JsonValue::Array(
+            route.cumulative_times_s.iter().map(|&t| geojson::JsonValue::from(t)).collect(),
+        ),
+    );
     let feature = geojson::Feature {
         geometry: Some(geometry),
         properties: Some(props),
@@ -133,9 +138,35 @@ fn calc_route(
 /// Geocode a place name to (lat, lon)
 #[pyfunction]
 fn geocode(place: String) -> PyResult<(f64, f64)> {
-    let rt = tokio::runtime::Runtime::new()
-        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
-    Ok(rt.block_on(geocoding::geocode(&place))?)
+    Ok(TOKIO_RT.block_on(geocoding::geocode(&place))?)
+}
+
+/// Fetch POIs from OpenStreetMap that fall within a given isochrone polygon.
+/// `isochrone_geojson` should be one of the strings returned by `calc_isochrones`.
+/// Returns a GeoJSON FeatureCollection string — each feature is a POI with its
+/// raw OSM tags as properties.
+#[pyfunction]
+fn fetch_pois(isochrone_geojson: String) -> PyResult<String> {
+    let polygon = poi::parse_isochrone(&isochrone_geojson)?;
+    let pois = TOKIO_RT.block_on(poi::fetch_pois_within(&polygon))?;
+    Ok(poi::pois_to_geojson(&pois))
+}
+
+/// Clear both the in-memory graph/XML caches and the on-disk XML cache.
+#[pyfunction]
+fn clear_cache() -> PyResult<()> {
+    cache::clear_cache()?;
+    cache::clear_disk_cache()?;
+    Ok(())
+}
+
+/// Return the path to the on-disk XML cache directory.
+/// Set the OSM_GRAPH_CACHE_DIR environment variable to override the default location.
+#[pyfunction]
+fn cache_dir() -> PyResult<String> {
+    Ok(cache::disk_cache_dir()
+        .to_string_lossy()
+        .into_owned())
 }
 
 /// Python module for quickly creating isochrones
@@ -144,5 +175,8 @@ fn pysochrone(_py: Python, m: &PyModule) -> pyo3::PyResult<()> {
     m.add_function(wrap_pyfunction!(calc_isochrones, m)?)?;
     m.add_function(wrap_pyfunction!(calc_route, m)?)?;
     m.add_function(wrap_pyfunction!(geocode, m)?)?;
+    m.add_function(wrap_pyfunction!(fetch_pois, m)?)?;
+    m.add_function(wrap_pyfunction!(clear_cache, m)?)?;
+    m.add_function(wrap_pyfunction!(cache_dir, m)?)?;
     Ok(())
 }

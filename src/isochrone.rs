@@ -8,6 +8,7 @@ use geo::{ConcaveHull, ConvexHull, KNearestConcaveHull, MultiPoint, Polygon};
 use petgraph::algo::dijkstra;
 use petgraph::prelude::*;
 use std::collections::HashSet;
+use std::sync::Arc;
 
 #[derive(Debug, Copy, Clone)]
 pub enum HullType {
@@ -132,11 +133,15 @@ pub async fn calculate_isochrones_from_point(
         cached
     } else {
         let xml = if let Some(cached_xml) = cache::check_xml_cache(&query)? {
-            cached_xml
+            cached_xml                                      // in-memory hit
+        } else if let Some(disk_xml) = cache::check_disk_xml_cache(&query) {
+            cache::insert_into_xml_cache(query.clone(), disk_xml.clone())?; // promote to memory
+            disk_xml                                        // disk hit
         } else {
             let fetched = overpass::make_request("https://overpass-api.de/api/interpreter", &query).await?;
+            cache::write_disk_xml_cache(&query, &fetched); // persist to disk (best-effort)
             cache::insert_into_xml_cache(query.clone(), fetched.clone())?;
-            fetched
+            fetched                                         // network fetch
         };
 
         let parsed = graph::parse_xml(&xml)?;
@@ -150,7 +155,7 @@ pub async fn calculate_isochrones_from_point(
     };
 
     let node_index = sg.nearest_node(lat, lon).ok_or(OsmGraphError::NodeNotFound)?;
-    let shared_graph = std::sync::Arc::new(sg.graph.clone());
+    let shared_graph = Arc::clone(&sg.graph); // O(1) refcount bump — no graph copy
     let isochrones = calculate_isochrones_concurrently(
         shared_graph,
         node_index,

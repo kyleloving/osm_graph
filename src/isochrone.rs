@@ -58,7 +58,7 @@ pub fn calculate_isochrones(
     isochrones
 }
 
-fn calculate_isochrones_concurrently(
+pub fn calculate_isochrones_concurrently(
     graph: std::sync::Arc<DiGraph<graph::XmlNode, graph::XmlWay>>,
     start_node: NodeIndex,
     time_limits: Vec<f64>,

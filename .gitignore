@@ -1,3 +1,5 @@
 /target
 /.venv
 /cache
+/data
+/site

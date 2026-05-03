@@ -1,5 +1,5 @@
 // Define an enum for network types
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum NetworkType {
     Drive,
     DriveService,
@@ -52,20 +52,22 @@ pub fn get_osm_filter(network_type: NetworkType) -> Result<&'static str, Overpas
 // Function to create the Overpass query string
 pub fn create_overpass_query(polygon_coord_str: &str, network_type: NetworkType) -> String {
     let filter = get_osm_filter(network_type).unwrap_or("");
-    format!("[out:xml];(way{}({});>;);out;", filter, polygon_coord_str)
+    format!("[out:xml][timeout:50];(way{}({});>;);out;", filter, polygon_coord_str)
 }
 
 // Reuse a single reqwest::Client across all HTTP calls in the library
 lazy_static::lazy_static! {
-    pub(crate) static ref CLIENT: reqwest::Client = reqwest::Client::new();
+    pub(crate) static ref CLIENT: reqwest::Client = reqwest::Client::builder()
+        .user_agent("layover_planner/0.1 (https://github.com/kyleloving/osm_graph)")
+        .build()
+        .expect("failed to build HTTP client");
 }
 
 // Function to make request to Overpass API
 pub async fn make_request(url: &str, query: &str) -> Result<String, reqwest::Error> {
     let response = CLIENT
         .post(url)
-        .header("Content-Type", "application/x-www-form-urlencoded")
-        .body(query.to_string())
+        .form(&[("data", query)])
         .send()
         .await?;
 

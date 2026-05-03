@@ -11,20 +11,27 @@ description = "This library provides a set of tools for generating isochrones fr
 
 [lib]
 name = "pysochrone"
-crate-type = ["cdylib"]
+# cdylib  — Python extension module (.so / .pyd)
+# rlib    — normal Rust library; lets other Rust crates depend on this package
+crate-type = ["cdylib", "rlib"]
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[features]
+# Enable this feature only when building the Python extension (handled by maturin).
+# Activating it pulls in pyo3 and compiles all Python bindings.
+# Without it the crate is a plain Rust library with no Python dependency.
+extension-module = ["pyo3/extension-module"]
 
 [dependencies]
-pyo3 = { version = "0.20.2", features = ["extension-module"] }
+pyo3 = { version = "0.20.2", optional = true }
 reqwest = { version = "0.11", features = ["json"] }
 tokio = { version = "1", features = ["full"] }
 lazy_static = "1.4.0"
 quick-xml = { version = "0.31", features = ["serialize"] }
 serde = { version = "1.0" , features = ["derive"] }
-petgraph = "0.6.4" 
+petgraph = "0.6.4"
 geo = "0.28.0"
-geojson = "0.24.1" 
+geojson = "0.24.1"
 geohash = "0.13.0"
 lru = "0.12.2"
 rstar = "0.12"
+osmpbf = "0.3"

@@ -18,8 +18,10 @@ fn create_poi_query(bbox: &str) -> String {
          node[\"tourism\"]({bbox});\
          node[\"historic\"]({bbox});\
          node[\"natural\"~\"peak|waterfall|cave_entrance|beach|hot_spring\"]({bbox});\
-         node[\"amenity\"~\"museum|theatre|cinema|arts_centre|library\"]({bbox});\
-         node[\"leisure\"~\"park|nature_reserve|garden\"]({bbox});\
+         node[\"amenity\"~\"restaurant|fast_food|cafe|bar|pub|biergarten|ice_cream|food_court|\
+         museum|theatre|cinema|arts_centre|library|place_of_worship|spa|swimming_pool\"]({bbox});\
+         node[\"leisure\"~\"park|nature_reserve|garden|sports_centre|fitness_centre\"]({bbox});\
+         node[\"shop\"~\"bakery|deli|chocolate|wine|cheese|mall|department_store\"]({bbox});\
          );out;"
     )
 }

@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"mod":["cache","error","geocoding","graph","isochrone","overpass","pbf","poi","routing","simplify","utils"]};

@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["bbox_from_polygon","create_poi_query","fetch_pois_within","parse_isochrone","pois_to_geojson"],"struct":["Poi"]};

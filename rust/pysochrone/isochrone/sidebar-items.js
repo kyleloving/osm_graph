@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["HullType"],"fn":["calculate_isochrones","calculate_isochrones_concurrently","calculate_isochrones_from_point"]};

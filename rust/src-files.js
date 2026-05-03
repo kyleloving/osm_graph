@@ -1,2 +1,0 @@
-createSrcSidebar('[["osm_graph",["",[],["cache.rs","error.rs","graph.rs","isochrone.rs","main.rs","overpass.rs","simplify.rs","utils.rs"]]],["pysochrone",["",[],["cache.rs","error.rs","geocoding.rs","graph.rs","isochrone.rs","lib.rs","overpass.rs","pbf.rs","poi.rs","routing.rs","simplify.rs","utils.rs"]]]]');
-//{"start":19,"fragment_lengths":[120,167]}

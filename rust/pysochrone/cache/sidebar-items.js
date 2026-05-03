@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["check_cache","check_disk_xml_cache","check_xml_cache","clear_cache","clear_disk_cache","disk_cache_dir","disk_xml_path","fnv1a","insert_into_cache","insert_into_xml_cache","write_disk_xml_cache"],"struct":["GRAPH_CACHE","XML_CACHE"],"type":["GraphCache","XmlCache"]};

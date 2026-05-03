@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["calculate_distance","calculate_travel_time","polygon_to_geojson","polygon_to_geojson_string"]};

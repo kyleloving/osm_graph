@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["is_poi_node","read_pbf","read_pbf_multi","way_passes_road_filter"],"struct":["RawNode","RawWay"]};

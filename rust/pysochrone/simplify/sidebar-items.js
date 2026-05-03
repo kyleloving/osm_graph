@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["build_path","consolidate_intersections","deduplicate_edges","get_unique_id","is_endpoint","merge_nodes","simplify_graph"],"static":["ID_COUNTER"]};

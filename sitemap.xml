@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+    <url>
+         <loc>https://kyleloving.github.io/osm_graph/</loc>
+         <lastmod>2026-05-03</lastmod>
+    </url>
+    <url>
+         <loc>https://kyleloving.github.io/osm_graph/examples/</loc>
+         <lastmod>2026-05-03</lastmod>
+    </url>
+    <url>
+         <loc>https://kyleloving.github.io/osm_graph/installation/</loc>
+         <lastmod>2026-05-03</lastmod>
+    </url>
+    <url>
+         <loc>https://kyleloving.github.io/osm_graph/python-api/</loc>
+         <lastmod>2026-05-03</lastmod>
+    </url>
+    <url>
+         <loc>https://kyleloving.github.io/osm_graph/python-graph/</loc>
+         <lastmod>2026-05-03</lastmod>
+    </url>
+    <url>
+         <loc>https://kyleloving.github.io/osm_graph/quickstart/</loc>
+         <lastmod>2026-05-03</lastmod>
+    </url>
+    <url>
+         <loc>https://kyleloving.github.io/osm_graph/rust-api/</loc>
+         <lastmod>2026-05-03</lastmod>
+    </url>
+</urlset>

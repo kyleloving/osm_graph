@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["NetworkType","OverpassError"],"fn":["bbox_from_point","create_overpass_query","get_osm_filter","make_request"],"struct":["CLIENT"]};

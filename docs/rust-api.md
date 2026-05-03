@@ -4,7 +4,7 @@ The Rust API exposes the same core functionality without Python overhead.
 All async functions require a Tokio runtime.
 
 Full generated API documentation is published alongside this site:  
-**[Rust API docs →](https://kyleloving.github.io/osm_graph/rust/osm_graph/index.html)**
+**[Rust API docs →](https://docs.rs/osm_graph/)**
 
 ---
 

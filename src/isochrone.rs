@@ -8,6 +8,7 @@ use geo::{ConcaveHull, ConvexHull, KNearestConcaveHull, MultiPoint, Polygon};
 use petgraph::algo::dijkstra;
 use petgraph::prelude::*;
 use std::collections::HashSet;
+use std::sync::Arc;
 
 #[derive(Debug, Copy, Clone)]
 pub enum HullType {
@@ -57,7 +58,7 @@ pub fn calculate_isochrones(
     isochrones
 }
 
-fn calculate_isochrones_concurrently(
+pub fn calculate_isochrones_concurrently(
     graph: std::sync::Arc<DiGraph<graph::XmlNode, graph::XmlWay>>,
     start_node: NodeIndex,
     time_limits: Vec<f64>,
@@ -106,14 +107,25 @@ fn calculate_isochrones_concurrently(
 pub async fn calculate_isochrones_from_point(
     lat: f64,
     lon: f64,
-    max_dist: f64,
+    max_dist: Option<f64>,
     time_limits: Vec<f64>,
     network_type: overpass::NetworkType,
     hull_type: HullType,
     retain_all: bool,
 ) -> Result<(Vec<Polygon>, SpatialGraph), OsmGraphError> {
 
-    let polygon_coord_str = overpass::bbox_from_point(lat, lon, max_dist);
+    // Auto-size bounding box if not provided.
+    // Use max time limit * a generous speed + 20% buffer to ensure the
+    // isochrone never saturates into a square at the bbox boundary.
+    let max_speed_m_per_s = match network_type {
+        NetworkType::Walk => 5.0 / 3.6,
+        NetworkType::Bike => 25.0 / 3.6,
+        _ => 120.0 / 3.6,
+    };
+    let max_time = time_limits.iter().cloned().fold(0.0_f64, f64::max);
+    let computed_dist = max_dist.unwrap_or_else(|| max_time * max_speed_m_per_s * 1.2);
+
+    let polygon_coord_str = overpass::bbox_from_point(lat, lon, computed_dist);
     let query = overpass::create_overpass_query(&polygon_coord_str, network_type);
     let graph_key = format!("{}:{}", query, retain_all);
 
@@ -121,11 +133,15 @@ pub async fn calculate_isochrones_from_point(
         cached
     } else {
         let xml = if let Some(cached_xml) = cache::check_xml_cache(&query)? {
-            cached_xml
+            cached_xml                                      // in-memory hit
+        } else if let Some(disk_xml) = cache::check_disk_xml_cache(&query) {
+            cache::insert_into_xml_cache(query.clone(), disk_xml.clone())?; // promote to memory
+            disk_xml                                        // disk hit
         } else {
             let fetched = overpass::make_request("https://overpass-api.de/api/interpreter", &query).await?;
+            cache::write_disk_xml_cache(&query, &fetched); // persist to disk (best-effort)
             cache::insert_into_xml_cache(query.clone(), fetched.clone())?;
-            fetched
+            fetched                                         // network fetch
         };
 
         let parsed = graph::parse_xml(&xml)?;
@@ -139,7 +155,7 @@ pub async fn calculate_isochrones_from_point(
     };
 
     let node_index = sg.nearest_node(lat, lon).ok_or(OsmGraphError::NodeNotFound)?;
-    let shared_graph = std::sync::Arc::new(sg.graph.clone());
+    let shared_graph = Arc::clone(&sg.graph); // O(1) refcount bump — no graph copy
     let isochrones = calculate_isochrones_concurrently(
         shared_graph,
         node_index,

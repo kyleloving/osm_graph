@@ -1,5 +1,5 @@
 // Define an enum for network types
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum NetworkType {
     Drive,
     DriveService,
@@ -35,7 +35,7 @@ pub fn get_osm_filter(network_type: NetworkType) -> Result<&'static str, Overpas
             "[\"highway\"][\"area\"!~\"yes\"][\"highway\"!~\"abandoned|bridleway|bus_guideway|construction|corridor|cycleway|elevator|escalator|footway|no|path|pedestrian|planned|platform|proposed|raceway|razed|steps|track\"][\"motor_vehicle\"!~\"no\"][\"motorcar\"!~\"no\"][\"service\"!~\"emergency_access|parking|parking_aisle|private\"]"
         ),
         NetworkType::Walk => Ok(
-            "[\"highway\"][\"area\"!~\"yes\"][\"highway\"!~\"abandoned|bus_guideway|construction|corridor|elevator|escalator|footway|motor|no|planned|platform|proposed|raceway|razed|steps\"][\"bicycle\"!~\"no\"][\"service\"!~\"private\"]"
+            "[\"highway\"][\"area\"!~\"yes\"][\"highway\"!~\"abandoned|bus_guideway|construction|corridor|elevator|escalator|motor|no|planned|platform|proposed|raceway|razed\"][\"foot\"!~\"no\"][\"service\"!~\"private\"]"
         ),
         NetworkType::Bike => Ok(
             "[\"highway\"][\"area\"!~\"yes\"][\"highway\"!~\"abandoned|bus_guideway|construction|corridor|elevator|escalator|footway|motor|no|planned|platform|proposed|raceway|razed|steps\"][\"bicycle\"!~\"no\"][\"service\"!~\"private\"]"
@@ -52,20 +52,22 @@ pub fn get_osm_filter(network_type: NetworkType) -> Result<&'static str, Overpas
 // Function to create the Overpass query string
 pub fn create_overpass_query(polygon_coord_str: &str, network_type: NetworkType) -> String {
     let filter = get_osm_filter(network_type).unwrap_or("");
-    format!("[out:xml];(way{}({});>;);out;", filter, polygon_coord_str)
+    format!("[out:xml][timeout:50];(way{}({});>;);out;", filter, polygon_coord_str)
 }
 
-// Reuse a single reqwest::Client for multiple requests
+// Reuse a single reqwest::Client across all HTTP calls in the library
 lazy_static::lazy_static! {
-    static ref CLIENT: reqwest::Client = reqwest::Client::new();
+    pub(crate) static ref CLIENT: reqwest::Client = reqwest::Client::builder()
+        .user_agent("layover_planner/0.1 (https://github.com/kyleloving/osm_graph)")
+        .build()
+        .expect("failed to build HTTP client");
 }
 
 // Function to make request to Overpass API
 pub async fn make_request(url: &str, query: &str) -> Result<String, reqwest::Error> {
     let response = CLIENT
         .post(url)
-        .header("Content-Type", "application/x-www-form-urlencoded")
-        .body(query.to_string())
+        .form(&[("data", query)])
         .send()
         .await?;
 
@@ -77,7 +79,7 @@ pub async fn make_request(url: &str, query: &str) -> Result<String, reqwest::Err
     }
 }
 
-// Function to construct a bounding box from a single lat/lon pair
+/// Construct a `south,west,north,east` bounding box string from a point and radius.
 pub fn bbox_from_point(lat: f64, lon: f64, dist: f64) -> String {
     const EARTH_RADIUS_M: f64 = 6_371_009.0;
 
@@ -94,4 +96,27 @@ pub fn bbox_from_point(lat: f64, lon: f64, dist: f64) -> String {
 
     // Construct polygon_coord_str for Overpass API query
     format!("{},{},{},{}", south, west, north, east)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_bbox_is_symmetric() {
+        let bbox = bbox_from_point(48.0, 11.0, 1000.0);
+        let parts: Vec<f64> = bbox.split(',').map(|s| s.parse().unwrap()).collect();
+        let (south, west, north, east) = (parts[0], parts[1], parts[2], parts[3]);
+        assert!((48.0 - south - (north - 48.0)).abs() < 1e-6);
+        assert!((11.0 - west - (east - 11.0)).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_bbox_larger_dist_gives_larger_box() {
+        let small = bbox_from_point(48.0, 11.0, 1_000.0);
+        let large = bbox_from_point(48.0, 11.0, 10_000.0);
+        let small_parts: Vec<f64> = small.split(',').map(|s| s.parse().unwrap()).collect();
+        let large_parts: Vec<f64> = large.split(',').map(|s| s.parse().unwrap()).collect();
+        assert!(large_parts[2] > small_parts[2]);
+    }
 }

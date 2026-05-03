@@ -1,0 +1,68 @@
+site_name: pysochrone
+site_description: Fast isochrones, routing, and POI lookups from OpenStreetMap — written in Rust, callable from Python.
+site_url: https://kyleloving.github.io/osm_graph/
+repo_url: https://github.com/kyleloving/osm_graph
+repo_name: kyleloving/osm_graph
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: teal
+      accent: cyan
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: teal
+      accent: cyan
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.instant
+    - navigation.top
+    - content.code.copy
+    - content.code.annotate
+  icon:
+    repo: fontawesome/brands/github
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - Installation: installation.md
+    - Quickstart: quickstart.md
+  - Python API:
+    - Module functions: python-api.md
+    - Graph object: python-graph.md
+  - Rust API: rust-api.md
+  - Examples: examples.md
+
+plugins:
+  - search
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.inlinehilite
+  - admonition
+  - pymdownx.details
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/kyleloving/osm_graph
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/pysochrone/

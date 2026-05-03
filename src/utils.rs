@@ -41,3 +41,42 @@ pub fn polygon_to_geojson_string(polygon: &Polygon<f64>) -> String {
     let geojson = polygon_to_geojson(polygon);
     geojson.to_string()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_distance_same_point() {
+        let d = calculate_distance(48.0, 11.0, 48.0, 11.0);
+        assert_eq!(d, 0.0);
+    }
+
+    #[test]
+    fn test_distance_known_value() {
+        // Munich to roughly 1km north — should be close to 1000m
+        let d = calculate_distance(48.0, 11.0, 48.009, 11.0);
+        assert!((d - 1000.0).abs() < 10.0, "Expected ~1000m, got {}", d);
+    }
+
+    #[test]
+    fn test_distance_is_symmetric() {
+        let d1 = calculate_distance(48.0, 11.0, 52.0, 13.0);
+        let d2 = calculate_distance(52.0, 13.0, 48.0, 11.0);
+        assert!((d1 - d2).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_travel_time_basic() {
+        // 1000m at 36 kph = 100 seconds
+        let t = calculate_travel_time(1000.0, 36.0);
+        assert!((t - 100.0).abs() < 1e-6, "Expected 100s, got {}", t);
+    }
+
+    #[test]
+    fn test_travel_time_walking() {
+        // 500m at 5 kph = 360 seconds
+        let t = calculate_travel_time(500.0, 5.0);
+        assert!((t - 360.0).abs() < 1e-6);
+    }
+}

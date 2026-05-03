@@ -1,0 +1,75 @@
+name: Deploy documentation
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write   # needed by peaceiris/actions-gh-pages
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # -----------------------------------------------------------------------
+      # Rust — generate cargo doc
+      # -----------------------------------------------------------------------
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      # Generate docs for the library and all public dependencies.
+      # RUSTDOCFLAGS sets the HTML root so inter-crate links resolve correctly
+      # when hosted under /rust/ on the site.
+      - name: Generate Rust API docs
+        run: cargo doc --no-deps --document-private-items
+        env:
+          RUSTDOCFLAGS: "-D warnings"
+          # Point pyo3 at a real Python so the build script succeeds.
+          PYO3_PYTHON: python3
+
+      # -----------------------------------------------------------------------
+      # Python — build MkDocs site
+      # -----------------------------------------------------------------------
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install MkDocs + Material theme
+        run: pip install mkdocs-material
+
+      - name: Build MkDocs site
+        run: mkdocs build --strict
+
+      # -----------------------------------------------------------------------
+      # Combine: copy Rust docs into the MkDocs output directory
+      # -----------------------------------------------------------------------
+      - name: Copy Rust docs into site
+        run: |
+          mkdir -p site/rust
+          cp -r target/doc/* site/rust/
+
+      # -----------------------------------------------------------------------
+      # Deploy to GitHub Pages
+      # -----------------------------------------------------------------------
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./site
+          # Keep the CNAME file if you use a custom domain.
+          # cname: docs.yourdomain.com

@@ -14,4 +14,4 @@ dynamic = ["version"]
 
 [tool.maturin]
 features = ["extension-module"]
-include = ["graphways.pyi", "pysochrone.py"]
+include = ["graphways.pyi"]

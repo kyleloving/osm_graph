@@ -6,7 +6,7 @@ Graphways was formerly `osm_graph` / `pysochrone`. The project was renamed to re
 
 Graphways builds reusable local road-network graphs from OpenStreetMap data, then runs reachability, isochrone, routing, and POI workflows directly in process.
 
-![Isochrones](isochrones.png)
+![Graphways demo](docs/assets/graphways-demo.gif)
 
 ## Features
 - **Graph Construction:** Parses OpenStreetMap data to construct a directed graph representing the road network.
@@ -45,9 +45,9 @@ maturin develop
 
 **Isochrones**
 ```python
-import graphways
+import graphways as gw
 
-graph = graphways.SpatialGraph.from_place("Washington, DC", "Walk")
+graph = gw.SpatialGraph.from_place("Washington, DC", "Walk")
 isochrones = graph.isochrone((38.9097, -77.0432), minutes=[10, 20, 30])
 # Returns a list of GeoJSON geometry strings, one per time limit
 ```

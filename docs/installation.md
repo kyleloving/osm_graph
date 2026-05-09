@@ -5,7 +5,7 @@
 ### From PyPI
 
 ```bash
-pip install pysochrone
+pip install graphways
 ```
 
 Wheels are provided for Python 3.8+ on Linux, macOS, and Windows (x86-64).
@@ -15,8 +15,8 @@ Wheels are provided for Python 3.8+ on Linux, macOS, and Windows (x86-64).
 Requires [Rust](https://rustup.rs/) and [maturin](https://www.maturin.rs/).
 
 ```bash
-git clone https://github.com/kyleloving/osm_graph.git
-cd osm_graph
+git clone https://github.com/kyleloving/graphways.git
+cd graphways
 pip install maturin
 maturin develop --release
 ```
@@ -29,14 +29,14 @@ Add to `Cargo.toml`:
 
 ```toml
 [dependencies]
-osm-graph = "0.2.0"
+graphways = "0.2.0"
 ```
 
-> **Note:** The crate is published as `osm-graph`; the library module is `pysochrone` (matching the Python package name).
+> **Note:** The crate is published as `graphways`; the library module is `graphways` (matching the Python package name).
 
 ## Dependencies
 
-pysochrone has no required Python dependencies — all heavy lifting is in Rust.
+graphways has no required Python dependencies — all heavy lifting is in Rust.
 
 Optional Python packages used in the examples:
 

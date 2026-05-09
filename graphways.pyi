@@ -1,5 +1,5 @@
 """
-Type stubs for pysochrone — the compiled Rust extension.
+Type stubs for graphways — the compiled Rust extension.
 
 All GeoJSON return values are strings.  Parse them with ``json.loads``.
 """
@@ -10,7 +10,85 @@ from __future__ import annotations
 # Graph object
 # ---------------------------------------------------------------------------
 
-class Graph:
+class Reachability:
+    """
+    One-sided reachability field produced by ``SpatialGraph.reachable_from``.
+
+    Isochrones are display projections of this result; the traversal itself is
+    retained so callers can inspect nodes and timings without rebuilding the graph.
+    """
+
+    @property
+    def max_time_s(self) -> float: ...
+
+    def node_count(self) -> int: ...
+
+    def travel_time_to_node_id(self, node_id: int) -> float | None: ...
+
+    def nodes(self) -> list[dict[str, float | int]]:
+        """
+        Return reachable nodes with ``node_id``, ``lat``, ``lon``, and
+        ``travel_time_s``.
+        """
+        ...
+
+    def isochrones(self, time_limits: list[float]) -> list[str]:
+        """
+        Build one GeoJSON isochrone geometry per travel-time threshold.
+        """
+        ...
+
+    def __repr__(self) -> str: ...
+
+class BetweenReachability:
+    """
+    Two-sided reachability field produced by ``SpatialGraph.reachable_between``.
+
+    Nodes in this result satisfy ``origin -> node -> destination`` within the
+    traversal budget.
+    """
+
+    @property
+    def max_time_s(self) -> float: ...
+
+    @property
+    def traversal_budget_s(self) -> float: ...
+
+    @property
+    def stop_time_s(self) -> float: ...
+
+    @property
+    def buffer_s(self) -> float: ...
+
+    @property
+    def direct_time_s(self) -> float: ...
+
+    def node_count(self) -> int: ...
+
+    def slack_at_node_id(self, node_id: int) -> float | None: ...
+
+    def nodes(self) -> list[dict[str, float | int]]:
+        """
+        Return nodes with ``node_id``, ``lat``, ``lon``, ``inbound_time_s``,
+        ``outbound_time_s``, and ``slack_s``.
+        """
+        ...
+
+    def slack_polygon(self, min_slack_s: float = 0.0) -> str | None:
+        """
+        Build a GeoJSON polygon enclosing nodes with at least ``min_slack_s``.
+        """
+        ...
+
+    def slack_polygons(self, min_slack_values: list[float]) -> list[str | None]:
+        """
+        Build one slack polygon per minimum-slack threshold.
+        """
+        ...
+
+    def __repr__(self) -> str: ...
+
+class SpatialGraph:
     """
     A road-network graph loaded from OpenStreetMap.
 
@@ -19,6 +97,49 @@ class Graph:
 
     Attributes are read-only; all mutations happen inside Rust.
     """
+
+    @staticmethod
+    def from_pbf(
+        path: str,
+        network_type: str,
+        retain_all: bool = False,
+    ) -> SpatialGraph:
+        """
+        Load a local OSM PBF file into a reusable ``SpatialGraph``.
+
+        ``network_type`` accepts ``"Drive"``, ``"DriveService"``, ``"Walk"``,
+        ``"Bike"``, ``"All"``, or ``"AllPrivate"``.
+        """
+        ...
+
+    @staticmethod
+    def from_osm(
+        xml: str,
+        network_type: str,
+        retain_all: bool = False,
+    ) -> SpatialGraph:
+        """
+        Parse an OSM XML string into a reusable ``SpatialGraph``.
+
+        ``network_type`` accepts ``"Drive"``, ``"DriveService"``, ``"Walk"``,
+        ``"Bike"``, ``"All"``, or ``"AllPrivate"``.
+        """
+        ...
+
+    @staticmethod
+    def from_place(
+        place: str,
+        network_type: str,
+        max_dist: float | None = None,
+        retain_all: bool = False,
+    ) -> SpatialGraph:
+        """
+        Geocode a place name and build a reusable ``SpatialGraph`` around it.
+
+        ``network_type`` accepts ``"Drive"``, ``"DriveService"``, ``"Walk"``,
+        ``"Bike"``, ``"All"``, or ``"AllPrivate"``.
+        """
+        ...
 
     def node_count(self) -> int:
         """Number of nodes in the graph."""
@@ -39,25 +160,20 @@ class Graph:
         """
         ...
 
-    def isochrones(
+    def isochrone(
         self,
-        lat: float,
-        lon: float,
-        time_limits: list[float],
-        hull_type: str = "Concave",
+        origin: tuple[float, float],
+        minutes: list[float],
     ) -> list[str]:
         """
         Compute isochrones from ``(lat, lon)`` using this graph.
 
         Parameters
         ----------
-        lat, lon:
-            Origin coordinates.
-        time_limits:
-            Travel-time thresholds in **seconds**.
-        hull_type:
-            ``"Convex"`` | ``"FastConcave"`` | ``"Concave"``
-
+        origin:
+            ``(lat, lon)`` origin coordinates.
+        minutes:
+            Travel-time thresholds in minutes.
         Returns
         -------
         list[str]
@@ -68,15 +184,13 @@ class Graph:
 
     def route(
         self,
-        origin_lat: float,
-        origin_lon: float,
-        dest_lat: float,
-        dest_lon: float,
+        origin: tuple[float, float],
+        destination: tuple[float, float],
     ) -> str:
         """
         Find the fastest route between two coordinates using A*.
 
-        The network type (drive/walk/bike) is inherited from the ``Graph``.
+        The network type (drive/walk/bike) is inherited from the ``SpatialGraph``.
 
         Returns
         -------
@@ -106,6 +220,36 @@ class Graph:
         """
         ...
 
+    def snap_point(self, lat: float, lon: float) -> dict[str, float | int] | None:
+        """
+        Return snap diagnostics for the nearest graph node to ``(lat, lon)``.
+
+        Keys: ``input_lat``, ``input_lon``, ``node_id``, ``node_lat``,
+        ``node_lon``, and ``distance_m``.
+        """
+        ...
+
+    def reachable(self, origin: tuple[float, float], minutes: float) -> Reachability:
+        """
+        Compute one-sided reachability from ``(lat, lon)`` within ``max_time_s``.
+        """
+        ...
+
+    def reachable_between(
+        self,
+        origin: tuple[float, float],
+        destination: tuple[float, float],
+        max_time_s: float,
+        stop_time_s: float = 0.0,
+        buffer_s: float = 0.0,
+    ) -> BetweenReachability:
+        """
+        Compute two-sided reachability for nodes that fit within:
+
+        ``origin -> node -> destination + stop_time_s + buffer_s <= max_time_s``.
+        """
+        ...
+
     def nodes_geojson(self) -> str:
         """
         All graph nodes as a GeoJSON ``FeatureCollection`` of ``Point`` features.
@@ -125,6 +269,8 @@ class Graph:
 
     def __repr__(self) -> str: ...
 
+Graph = SpatialGraph
+
 # ---------------------------------------------------------------------------
 # Module-level functions
 # ---------------------------------------------------------------------------
@@ -135,9 +281,9 @@ def build_graph(
     network_type: str,
     max_dist: float | None = None,
     retain_all: bool = False,
-) -> Graph:
+) -> SpatialGraph:
     """
-    Build and return a road-network :class:`Graph` for the area around ``(lat, lon)``.
+    Build and return a road-network :class:`SpatialGraph` for the area around ``(lat, lon)``.
 
     The graph is cached — repeated calls for the same area and network type
     return the in-memory graph with no network I/O.
@@ -162,7 +308,6 @@ def calc_isochrones(
     lon: float,
     time_limits: list[float],
     network_type: str,
-    hull_type: str,
     max_dist: float | None = None,
     retain_all: bool = False,
 ) -> list[str]:
@@ -178,8 +323,6 @@ def calc_isochrones(
     network_type:
         ``"Drive"`` | ``"DriveService"`` | ``"Walk"`` | ``"Bike"`` |
         ``"All"`` | ``"AllPrivate"``
-    hull_type:
-        ``"Convex"`` | ``"FastConcave"`` | ``"Concave"``
     max_dist:
         Bounding-box radius in metres.  When ``None``, auto-sized from the
         largest time limit.

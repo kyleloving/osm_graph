@@ -1,16 +1,39 @@
 use crate::cache;
 use crate::error::OsmGraphError;
-use crate::graph::XmlData;
+use crate::graph::{SpatialGraph, XmlData};
 use crate::overpass;
+use crate::reachability::ReachabilityResult;
 use geo::{Contains, Coord, LineString, Point, Polygon};
 use std::collections::HashMap;
 
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone)]
 pub struct Poi {
     pub id: i64,
     pub lat: f64,
     pub lon: f64,
     pub tags: HashMap<String, String>,
 }
+
+/// A POI confirmed reachable via the road network, with the actual network
+/// travel time from the origin rather than a straight-line approximation.
+pub struct ReachablePoi {
+    pub poi: Poi,
+    /// Network travel time from the origin to the nearest graph node of this
+    /// POI, in seconds.
+    pub travel_time_s: f64,
+    /// OSM node id of the graph node this POI snapped to.
+    pub snap_node_id: i64,
+    /// Straight-line distance from the POI coordinate to its snapped graph node.
+    pub snap_distance_m: f64,
+}
+
+// ---------------------------------------------------------------------------
+// Internal helpers
+// ---------------------------------------------------------------------------
 
 fn create_poi_query(bbox: &str) -> String {
     format!(
@@ -42,6 +65,24 @@ fn bbox_from_polygon(polygon: &Polygon<f64>) -> String {
     format!("{},{},{},{}", min_lat, min_lon, max_lat, max_lon)
 }
 
+async fn fetch_xml_cached(query: &str) -> Result<String, OsmGraphError> {
+    if let Some(cached) = cache::check_xml_cache(query)? {
+        return Ok(cached);
+    }
+    if let Some(disk) = cache::check_disk_xml_cache(query) {
+        cache::insert_into_xml_cache(query.to_string(), disk.clone())?;
+        return Ok(disk);
+    }
+    let fetched = overpass::make_request("https://overpass-api.de/api/interpreter", query).await?;
+    cache::write_disk_xml_cache(query, &fetched);
+    cache::insert_into_xml_cache(query.to_string(), fetched.clone())?;
+    Ok(fetched)
+}
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
 /// Parse a GeoJSON geometry string (as produced by `polygon_to_geojson_string`)
 /// back into a `geo::Polygon<f64>` using the library's internal x=lat, y=lon convention.
 pub fn parse_isochrone(geojson_str: &str) -> Result<Polygon<f64>, OsmGraphError> {
@@ -51,9 +92,17 @@ pub fn parse_isochrone(geojson_str: &str) -> Result<Polygon<f64>, OsmGraphError>
     let rings = match gj {
         geojson::GeoJson::Geometry(geom) => match geom.value {
             geojson::Value::Polygon(rings) => rings,
-            _ => return Err(OsmGraphError::InvalidInput("expected Polygon geometry".into())),
+            _ => {
+                return Err(OsmGraphError::InvalidInput(
+                    "expected Polygon geometry".into(),
+                ))
+            }
         },
-        _ => return Err(OsmGraphError::InvalidInput("expected a GeoJSON Geometry, not a Feature or FeatureCollection".into())),
+        _ => {
+            return Err(OsmGraphError::InvalidInput(
+                "expected a GeoJSON Geometry, not a Feature or FeatureCollection".into(),
+            ))
+        }
     };
     // GeoJSON coords are [lon, lat]; internal convention is x=lat, y=lon.
     let exterior: Vec<Coord<f64>> = rings[0]
@@ -63,22 +112,16 @@ pub fn parse_isochrone(geojson_str: &str) -> Result<Polygon<f64>, OsmGraphError>
     Ok(Polygon::new(LineString::from(exterior), vec![]))
 }
 
+/// Fetch POIs within a polygon and filter by geometric containment.
+///
+/// This is the original approach: POIs whose lat/lon falls inside the polygon
+/// are kept. It is fast and simple but uses polygon geometry as a proxy for
+/// network reachability. Prefer [`fetch_pois_within_reachability`] when a
+/// [`ReachabilityResult`] is already available.
 pub async fn fetch_pois_within(polygon: &Polygon<f64>) -> Result<Vec<Poi>, OsmGraphError> {
     let bbox = bbox_from_polygon(polygon);
     let query = create_poi_query(&bbox);
-
-    let xml = if let Some(cached) = cache::check_xml_cache(&query)? {
-        cached
-    } else if let Some(disk) = cache::check_disk_xml_cache(&query) {
-        cache::insert_into_xml_cache(query.clone(), disk.clone())?;
-        disk
-    } else {
-        let fetched = overpass::make_request("https://overpass-api.de/api/interpreter", &query).await?;
-        cache::write_disk_xml_cache(&query, &fetched);
-        cache::insert_into_xml_cache(query.clone(), fetched.clone())?;
-        fetched
-    };
-
+    let xml = fetch_xml_cached(&query).await?;
     let data: XmlData = quick_xml::de::from_str(&xml)?;
 
     let pois = data
@@ -96,11 +139,62 @@ pub async fn fetch_pois_within(polygon: &Polygon<f64>) -> Result<Vec<Poi>, OsmGr
     Ok(pois)
 }
 
+/// Fetch POIs and filter them by actual network travel time.
+///
+/// Uses the [`ReachabilityResult`] from a prior graph search as the truth
+/// source instead of polygon containment:
+///
+/// 1. Derives a bounding box from the origin node and `max_cost`.
+/// 2. Fetches POI nodes from Overpass within that box (cached).
+/// 3. Snaps each POI to its nearest graph node via the spatial index.
+/// 4. Keeps only POIs whose snapped node appears in `reachability.distances`.
+///
+/// The `travel_time_s` on each [`ReachablePoi`] is the Dijkstra distance to
+/// the snapped node — the same value that drove the isochrone — not a
+/// straight-line estimate. POIs that snap to unreachable nodes (across a
+/// river, behind a highway, in a disconnected subgraph) are correctly excluded.
+pub async fn fetch_pois_within_reachability(
+    sg: &SpatialGraph,
+    reachability: &ReachabilityResult,
+) -> Result<Vec<ReachablePoi>, OsmGraphError> {
+    // Size the bbox using the same generous speed assumption as isochrone
+    // bbox sizing so the box always contains the full reachable area.
+    let origin = &sg.graph[reachability.start];
+    let max_speed_m_per_s = 120.0_f64 / 3.6;
+    let radius_m = reachability.max_cost * max_speed_m_per_s * 1.2;
+    let bbox = overpass::bbox_from_point(origin.lat, origin.lon, radius_m);
+    let query = create_poi_query(&bbox);
+    let xml = fetch_xml_cached(&query).await?;
+    let data: XmlData = quick_xml::de::from_str(&xml)?;
+
+    let pois = data
+        .nodes
+        .into_iter()
+        .filter_map(|n| {
+            let snapped = sg.poi_snaps.as_ref()?.get(&n.id).copied()?;
+            let travel_time_s = *reachability.distances.get(&snapped.snap.node_index)?;
+            Some(ReachablePoi {
+                poi: Poi {
+                    id: n.id,
+                    lat: n.lat,
+                    lon: n.lon,
+                    tags: n.tags.into_iter().map(|t| (t.key, t.value)).collect(),
+                },
+                travel_time_s,
+                snap_node_id: snapped.snap.node_id,
+                snap_distance_m: snapped.snap.distance_m,
+            })
+        })
+        .collect();
+
+    Ok(pois)
+}
+
+/// Serialize a slice of [`Poi`] to a GeoJSON FeatureCollection.
 pub fn pois_to_geojson(pois: &[Poi]) -> String {
     let features: Vec<geojson::Feature> = pois
         .iter()
         .map(|poi| {
-            // GeoJSON spec: [longitude, latitude]
             let geometry = geojson::Geometry::new(geojson::Value::Point(vec![poi.lon, poi.lat]));
             let props: geojson::JsonObject = poi
                 .tags
@@ -123,32 +217,82 @@ pub fn pois_to_geojson(pois: &[Poi]) -> String {
     .to_string()
 }
 
+/// Serialize a slice of [`ReachablePoi`] to a GeoJSON FeatureCollection.
+/// Each feature includes all OSM tags as properties plus a `travel_time_s`
+/// field with the network travel time from the origin and `snap_distance_m`.
+pub fn reachable_pois_to_geojson(pois: &[ReachablePoi]) -> String {
+    let features: Vec<geojson::Feature> = pois
+        .iter()
+        .map(|rp| {
+            let geometry =
+                geojson::Geometry::new(geojson::Value::Point(vec![rp.poi.lon, rp.poi.lat]));
+            let mut props: geojson::JsonObject = rp
+                .poi
+                .tags
+                .iter()
+                .map(|(k, v)| (k.clone(), geojson::JsonValue::String(v.clone())))
+                .collect();
+            props.insert("travel_time_s".into(), rp.travel_time_s.into());
+            props.insert("snap_node_id".into(), rp.snap_node_id.into());
+            props.insert("snap_distance_m".into(), rp.snap_distance_m.into());
+            geojson::Feature {
+                geometry: Some(geometry),
+                properties: Some(props),
+                ..Default::default()
+            }
+        })
+        .collect();
+
+    geojson::GeoJson::FeatureCollection(geojson::FeatureCollection {
+        features,
+        bbox: None,
+        foreign_members: None,
+    })
+    .to_string()
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn test_parse_isochrone_valid() {
-        // GeoJSON uses [lon, lat]; internal convention is x=lat, y=lon
         let geojson = r#"{"type":"Polygon","coordinates":[[[11.0,48.0],[11.1,48.0],[11.05,48.1],[11.0,48.0]]]}"#;
         let polygon = parse_isochrone(geojson).unwrap();
         let first = polygon.exterior().coords().next().unwrap();
-        // [11.0, 48.0] → x=48.0 (lat), y=11.0 (lon)
-        assert!((first.x - 48.0).abs() < 1e-9, "x should be lat (48.0), got {}", first.x);
-        assert!((first.y - 11.0).abs() < 1e-9, "y should be lon (11.0), got {}", first.y);
+        assert!(
+            (first.x - 48.0).abs() < 1e-9,
+            "x should be lat (48.0), got {}",
+            first.x
+        );
+        assert!(
+            (first.y - 11.0).abs() < 1e-9,
+            "y should be lon (11.0), got {}",
+            first.y
+        );
     }
 
     #[test]
     fn test_parse_isochrone_invalid_json() {
         let result = parse_isochrone("not valid json");
-        assert!(matches!(result, Err(crate::error::OsmGraphError::InvalidInput(_))));
+        assert!(matches!(
+            result,
+            Err(crate::error::OsmGraphError::InvalidInput(_))
+        ));
     }
 
     #[test]
     fn test_parse_isochrone_wrong_geometry_type() {
         let geojson = r#"{"type":"Point","coordinates":[11.0,48.0]}"#;
         let result = parse_isochrone(geojson);
-        assert!(matches!(result, Err(crate::error::OsmGraphError::InvalidInput(_))));
+        assert!(matches!(
+            result,
+            Err(crate::error::OsmGraphError::InvalidInput(_))
+        ));
     }
 
     #[test]
@@ -164,15 +308,22 @@ mod tests {
 
     #[test]
     fn test_pois_to_geojson_coordinate_order() {
-        // GeoJSON spec: coordinates must be [longitude, latitude]
-        let poi = Poi { id: 1, lat: 48.0, lon: 11.0, tags: HashMap::new() };
+        let poi = Poi {
+            id: 1,
+            lat: 48.0,
+            lon: 11.0,
+            tags: HashMap::new(),
+        };
         let json = pois_to_geojson(&[poi]);
         let gj: geojson::GeoJson = json.parse().unwrap();
         if let geojson::GeoJson::FeatureCollection(fc) = gj {
             let geom = fc.features[0].geometry.as_ref().unwrap();
             if let geojson::Value::Point(coords) = &geom.value {
                 assert!((coords[0] - 11.0).abs() < 1e-9, "first coord should be lon");
-                assert!((coords[1] - 48.0).abs() < 1e-9, "second coord should be lat");
+                assert!(
+                    (coords[1] - 48.0).abs() < 1e-9,
+                    "second coord should be lat"
+                );
             } else {
                 panic!("expected Point geometry");
             }
@@ -185,12 +336,58 @@ mod tests {
     fn test_pois_to_geojson_tags_as_properties() {
         let mut tags = HashMap::new();
         tags.insert("tourism".to_string(), "museum".to_string());
-        let poi = Poi { id: 1, lat: 48.0, lon: 11.0, tags };
+        let poi = Poi {
+            id: 1,
+            lat: 48.0,
+            lon: 11.0,
+            tags,
+        };
         let json = pois_to_geojson(&[poi]);
         let gj: geojson::GeoJson = json.parse().unwrap();
         if let geojson::GeoJson::FeatureCollection(fc) = gj {
             let props = fc.features[0].properties.as_ref().unwrap();
-            assert_eq!(props["tourism"], geojson::JsonValue::String("museum".to_string()));
+            assert_eq!(
+                props["tourism"],
+                geojson::JsonValue::String("museum".to_string())
+            );
+        } else {
+            panic!("expected FeatureCollection");
+        }
+    }
+
+    #[test]
+    fn test_reachable_pois_to_geojson_includes_travel_time() {
+        let poi = Poi {
+            id: 1,
+            lat: 48.0,
+            lon: 11.0,
+            tags: HashMap::new(),
+        };
+        let rp = ReachablePoi {
+            poi,
+            travel_time_s: 42.5,
+            snap_node_id: 1001,
+            snap_distance_m: 7.0,
+        };
+        let json = reachable_pois_to_geojson(&[rp]);
+        let gj: geojson::GeoJson = json.parse().unwrap();
+        if let geojson::GeoJson::FeatureCollection(fc) = gj {
+            let props = fc.features[0].properties.as_ref().unwrap();
+            let tt = props["travel_time_s"].as_f64().unwrap();
+            let snap_node_id = props["snap_node_id"].as_i64().unwrap();
+            let snap = props["snap_distance_m"].as_f64().unwrap();
+            assert!(
+                (tt - 42.5).abs() < 1e-9,
+                "travel_time_s should be 42.5, got {tt}"
+            );
+            assert!(
+                snap_node_id == 1001,
+                "snap_node_id should be 1001, got {snap_node_id}"
+            );
+            assert!(
+                (snap - 7.0).abs() < 1e-9,
+                "snap_distance_m should be 7.0, got {snap}"
+            );
         } else {
             panic!("expected FeatureCollection");
         }

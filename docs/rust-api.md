@@ -4,15 +4,15 @@ The Rust API exposes the same core functionality without Python overhead.
 All async functions require a Tokio runtime.
 
 Full generated API documentation is published alongside this site:  
-**[Rust API docs →](https://docs.rs/osm_graph/)**
+**[Rust API docs →](https://docs.rs/graphways/)**
 
 ---
 
 ## Quick example
 
 ```rust
-use osm_graph::isochrone::{calculate_isochrones_from_point, HullType};
-use osm_graph::overpass::NetworkType;
+use graphways::isochrone::calculate_isochrones_from_point;
+use graphways::overpass::NetworkType;
 
 #[tokio::main]
 async fn main() {
@@ -22,7 +22,6 @@ async fn main() {
         Some(10_000.0),                                        // max_dist in metres; None = auto
         vec![300.0, 600.0, 900.0, 1_200.0, 1_500.0, 1_800.0],
         NetworkType::Drive,
-        HullType::Concave,
         false,                                                 // false = simplified (faster)
     )
     .await
@@ -53,20 +52,6 @@ Controls which OSM highway tags are included in the graph.  See the [Quickstart]
 
 ---
 
-### `HullType`
-
-```rust
-pub enum HullType {
-    Convex,
-    FastConcave,
-    Concave,
-}
-```
-
-Controls how the isochrone boundary is computed from the set of reachable nodes.
-
----
-
 ### `SpatialGraph`
 
 ```rust
@@ -88,6 +73,25 @@ let node_count = sg.graph.node_count();
 let edge_count = sg.graph.edge_count();
 ```
 
+For local PBF workflows, construct the reusable graph directly:
+
+```rust
+use graphways::graph::SpatialGraph;
+use graphways::overpass::NetworkType;
+
+let graph = SpatialGraph::from_pbf(
+    "data/district-of-columbia-latest.osm.pbf",
+    NetworkType::Walk,
+    None,
+)?;
+```
+
+For OSM XML, use the sibling constructor:
+
+```rust
+let graph = SpatialGraph::from_osm(xml, NetworkType::Walk, None)?;
+```
+
 ---
 
 ### `XmlNode`
@@ -98,7 +102,6 @@ pub struct XmlNode {
     pub lat: f64,
     pub lon: f64,
     pub tags: Vec<XmlTag>,
-    pub geohash: Option<String>,
 }
 ```
 
@@ -131,13 +134,12 @@ pub async fn calculate_isochrones_from_point(
     max_dist: Option<f64>,
     time_limits: Vec<f64>,
     network_type: NetworkType,
-    hull_type: HullType,
     retain_all: bool,
 ) -> Result<(Vec<Polygon>, SpatialGraph), OsmGraphError>
 ```
 
 Fetch (or cache-hit) the road network, run a single Dijkstra pass, and compute
-hull polygons for each time limit in parallel threads.
+triangulated contour polygons for each time limit.
 
 Pass `max_dist = None` to auto-size the bounding box from the largest time limit.
 Pass `time_limits = vec![]` to skip isochrone computation and only obtain the `SpatialGraph`.

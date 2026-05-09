@@ -3,7 +3,7 @@ requires = ["maturin>=1.0,<2.0"]
 build-backend = "maturin"
 
 [project]
-name = "pysochrone"
+name = "graphways"
 requires-python = ">=3.8"
 classifiers = [
     "Programming Language :: Rust",
@@ -14,3 +14,4 @@ dynamic = ["version"]
 
 [tool.maturin]
 features = ["extension-module"]
+include = ["graphways.pyi", "pysochrone.py"]

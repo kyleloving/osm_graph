@@ -1,16 +1,32 @@
 [package]
-name = "osm_graph"
-version = "0.2.0"
+name = "graphways"
+version = "0.3.0"
 edition = "2021"
 license = "MIT"
-repository = "https://github.com/kyleloving/osm_graph/tree/main"
+repository = "https://github.com/kyleloving/graphways"
 keywords = ["OpenStreetMaps", "Isochrone", "Mobility", "Geo", "Petgraph"]
 categories = ["science::geo", "simulation", "visualization"]
-exclude = ["/examples", "*.png"]
-description = "This library provides a set of tools for generating isochrones from geographic coordinates. It leverages OpenStreetMap data to construct road networks and calculate areas accessible within specified time limits. The library is designed for both Rust and Python, offering high performance and easy integration into data science workflows."
+exclude = [
+    "/.github",
+    "/.venv",
+    "/cache",
+    "/data",
+    "/docs",
+    "/site",
+    "/target",
+    "/benchmarks",
+    "/examples/*.py",
+    "/*.html",
+    "/*.png",
+    "/graphways.pyi",
+    "/mkdocs.yml",
+    "/pyproject.toml",
+    "/pysochrone.py",
+]
+description = "Fast OpenStreetMap reachability, routing, and isochrones from Python, powered by Rust — no routing server required."
 
 [lib]
-name = "pysochrone"
+name = "graphways"
 # cdylib  — Python extension module (.so / .pyd)
 # rlib    — normal Rust library; lets other Rust crates depend on this package
 crate-type = ["cdylib", "rlib"]
@@ -20,6 +36,10 @@ crate-type = ["cdylib", "rlib"]
 # Activating it pulls in pyo3 and compiles all Python bindings.
 # Without it the crate is a plain Rust library with no Python dependency.
 extension-module = ["pyo3/extension-module"]
+
+[profile.profiling]
+inherits = "release"
+debug = true
 
 [dependencies]
 pyo3 = { version = "0.20.2", optional = true }
@@ -31,7 +51,7 @@ serde = { version = "1.0" , features = ["derive"] }
 petgraph = "0.6.4"
 geo = "0.28.0"
 geojson = "0.24.1"
-geohash = "0.13.0"
 lru = "0.12.2"
 rstar = "0.12"
 osmpbf = "0.3"
+spade = "2.15.1"

@@ -9,8 +9,8 @@
 use std::env;
 use std::time::Instant;
 
-use pysochrone::overpass::NetworkType;
-use pysochrone::pbf::read_pbf;
+use graphways::overpass::NetworkType;
+use graphways::pbf::read_pbf;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
@@ -31,22 +31,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("reading {} ({:?}) …", path, net);
     let start = Instant::now();
-    let (data, poi_ids) = read_pbf(path, net)?;
+    let (data, pois) = read_pbf(path, net)?;
     let elapsed = start.elapsed();
 
     let (mut min_lat, mut max_lat) = (f64::MAX, f64::MIN);
     let (mut min_lon, mut max_lon) = (f64::MAX, f64::MIN);
     for n in &data.nodes {
-        min_lat = min_lat.min(n.lat); max_lat = max_lat.max(n.lat);
-        min_lon = min_lon.min(n.lon); max_lon = max_lon.max(n.lon);
+        min_lat = min_lat.min(n.lat);
+        max_lat = max_lat.max(n.lat);
+        min_lon = min_lon.min(n.lon);
+        max_lon = max_lon.max(n.lon);
     }
 
     println!();
     println!("parsed in       {:.2}s", elapsed.as_secs_f64());
     println!("nodes (kept)    {}", data.nodes.len());
     println!("ways            {}", data.ways.len());
-    println!("POI nodes       {}", poi_ids.len());
-    println!("bbox (s,w,n,e)  {:.5}, {:.5}, {:.5}, {:.5}", min_lat, min_lon, max_lat, max_lon);
+    println!("POIs            {}", pois.len());
+    println!(
+        "bbox (s,w,n,e)  {:.5}, {:.5}, {:.5}, {:.5}",
+        min_lat, min_lon, max_lat, max_lon
+    );
 
     Ok(())
 }

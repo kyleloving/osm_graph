@@ -1,10 +1,10 @@
+use crate::simplify::simplify_graph;
+use crate::utils::{calculate_distance, calculate_travel_time};
 use petgraph::graph::{DiGraph, NodeIndex};
+use rstar::{PointDistance, RTree, RTreeObject, AABB};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::sync::Arc;
-use crate::utils::{calculate_distance, calculate_travel_time};
-use crate::simplify::simplify_graph;
-use rstar::{RTree, RTreeObject, AABB, PointDistance};
 
 #[derive(Debug, Deserialize)]
 pub struct XmlData {
@@ -24,7 +24,6 @@ pub struct XmlNode {
     pub lon: f64,
     #[serde(rename = "tag", default)]
     pub tags: Vec<XmlTag>,
-    pub geohash: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -48,17 +47,24 @@ pub struct XmlWay {
 }
 
 impl XmlWay {
-    pub fn filter_useful_tags(self) -> Self {
-        const USEFUL_TAGS: &[&str] = &[
-            "bridge", "tunnel", "oneway", "lanes", "ref", "name",
-            "highway", "maxspeed", "service", "access", "area",
-            "landuse", "width", "est_width", "junction",
-        ];
+    pub fn filter_useful_tags(mut self) -> Self {
+        const USEFUL_TAGS: &[&str] = &["highway", "name", "ref", "bridge", "tunnel", "service"];
         // Linear search on 15-element static slice — no HashSet allocation needed.
-        let tags = self.tags.into_iter()
-            .filter(|tag| USEFUL_TAGS.iter().any(|&k| k == tag.key.as_str()))
-            .collect();
-        XmlWay { tags, ..self }
+        self.tags
+            .retain(|tag| USEFUL_TAGS.iter().any(|&k| k == tag.key.as_str()));
+        self
+    }
+
+    /// Return the travel time (seconds) for the given network type.
+    /// Centralises the walk / bike / drive dispatch so call sites don't
+    /// repeat the same match expression.
+    #[inline]
+    pub fn travel_time(&self, network_type: crate::overpass::NetworkType) -> f64 {
+        match network_type {
+            crate::overpass::NetworkType::Walk => self.walk_travel_time,
+            crate::overpass::NetworkType::Bike => self.bike_travel_time,
+            _ => self.drive_travel_time,
+        }
     }
 }
 
@@ -76,9 +82,11 @@ pub struct XmlTag {
     pub value: String,
 }
 
-struct PathDirectionality {
-    is_one_way: bool,
-    is_reversed: bool,
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Direction {
+    Bidirectional,
+    OneWayForward,
+    OneWayReverse,
 }
 
 // Function to parse the XML response
@@ -91,30 +99,75 @@ fn find_tag<'a>(tags: &'a [XmlTag], key: &str) -> Option<&'a XmlTag> {
     tags.iter().find(|tag| tag.key == key)
 }
 
-fn assess_path_directionality(path: &XmlWay) -> PathDirectionality {
+fn assess_path_directionality(path: &XmlWay) -> Direction {
     let oneway_tag = find_tag(&path.tags, "oneway");
     let junction_tag = find_tag(&path.tags, "junction");
 
-    let is_one_way = match oneway_tag {
-        Some(tag) => {
-            // The oneway tag can have several values indicating true: "yes", "true", "1"
-            // or indicating reversed: "-1", "reverse"
-            // Any other value (including absence of the tag) defaults to false
-            matches!(tag.value.as_str(), "yes" | "true" | "1" | "-1" | "reverse")
-        },
-        None => false,
-    };
+    if oneway_tag.map_or(false, |tag| matches!(tag.value.as_str(), "-1" | "reverse")) {
+        return Direction::OneWayReverse;
+    }
 
-    let is_reversed = oneway_tag.map_or(false, |tag| {
-        matches!(tag.value.as_str(), "-1" | "reverse")
-    });
+    if oneway_tag.map_or(false, |tag| {
+        matches!(tag.value.as_str(), "yes" | "true" | "1")
+    }) {
+        return Direction::OneWayForward;
+    }
 
     // Roundabouts are considered one-way implicitly
     let is_roundabout = junction_tag.map_or(false, |tag| tag.value == "roundabout");
+    if is_roundabout {
+        Direction::OneWayForward
+    } else {
+        Direction::Bidirectional
+    }
+}
 
-    PathDirectionality {
-        is_one_way: is_one_way || is_roundabout,
-        is_reversed,
+fn highway_speed_kph(highway: &str) -> Option<f64> {
+    match highway {
+        "motorway" => Some(110.0),
+        "motorway_link" => Some(60.0),
+        "trunk" => Some(90.0),
+        "trunk_link" => Some(45.0),
+        "primary" => Some(65.0),
+        "primary_link" => Some(45.0),
+        "secondary" => Some(55.0),
+        "secondary_link" => Some(40.0),
+        "tertiary" => Some(45.0),
+        "tertiary_link" => Some(35.0),
+        "unclassified" => Some(45.0),
+        "residential" => Some(30.0),
+        "living_street" => Some(10.0),
+        "service" => Some(20.0),
+        "track" => Some(20.0),
+        "road" => Some(50.0),
+        _ => None,
+    }
+}
+
+fn way_speed_kph(way: &XmlWay) -> f64 {
+    const FALLBACK_SPEED_KPH: f64 = 50.0;
+
+    if let Some(maxspeed) =
+        find_tag(&way.tags, "maxspeed").and_then(|tag| clean_maxspeed(&tag.value))
+    {
+        return maxspeed;
+    }
+
+    find_tag(&way.tags, "highway")
+        .and_then(|tag| highway_speed_kph(&tag.value))
+        .unwrap_or(FALLBACK_SPEED_KPH)
+}
+
+fn edge_way_from_template(template: &XmlWay, length: f64, speed_kph: f64) -> XmlWay {
+    XmlWay {
+        id: template.id,
+        nodes: Vec::new(),
+        tags: template.tags.clone(),
+        length,
+        speed_kph,
+        walk_travel_time: calculate_travel_time(length, 5.0),
+        bike_travel_time: calculate_travel_time(length, 15.0),
+        drive_travel_time: calculate_travel_time(length, speed_kph),
     }
 }
 
@@ -123,7 +176,7 @@ pub fn create_graph(
     nodes: Vec<XmlNode>,
     ways: Vec<XmlWay>,
     retain_all: bool,
-    _bidirectional: bool,
+    bidirectional: bool,
 ) -> DiGraph<XmlNode, XmlWay> {
     let mut graph = DiGraph::<XmlNode, XmlWay>::new();
     let mut node_index_map = HashMap::new();
@@ -140,58 +193,49 @@ pub fn create_graph(
         // Extract node refs before consuming `way` so that edge weights are stored
         // without the construction-only node list (saves memory for every edge in the graph).
         let node_refs = std::mem::take(&mut way.nodes);
+        let path_direction = assess_path_directionality(&way);
+        let speed_kph = way_speed_kph(&way);
         let filtered_way = way.filter_useful_tags();
-        let path_direction = assess_path_directionality(&filtered_way);
 
         for window in node_refs.windows(2) {
             if let [start_ref, end_ref] = window {
-                let (start_index, end_index) = if path_direction.is_reversed {
-                    (
-                        node_index_map[&end_ref.node_id],
-                        node_index_map[&start_ref.node_id],
-                    )
-                } else {
-                    (
-                        node_index_map[&start_ref.node_id],
-                        node_index_map[&end_ref.node_id],
-                    )
+                let start_index = node_index_map[&start_ref.node_id];
+                let end_index = node_index_map[&end_ref.node_id];
+                let length = {
+                    let start_node = &graph[start_index];
+                    let end_node = &graph[end_index];
+                    calculate_distance(start_node.lat, start_node.lon, end_node.lat, end_node.lon)
                 };
+                let edge_way = edge_way_from_template(&filtered_way, length, speed_kph);
 
-                graph.add_edge(start_index, end_index, filtered_way.clone());
-                if !path_direction.is_one_way {
-                    graph.add_edge(end_index, start_index, filtered_way.clone());
+                match path_direction {
+                    Direction::OneWayForward => {
+                        graph.add_edge(start_index, end_index, edge_way);
+                    }
+                    Direction::OneWayReverse => {
+                        graph.add_edge(end_index, start_index, edge_way);
+                    }
+                    Direction::Bidirectional => {
+                        graph.add_edge(start_index, end_index, edge_way.clone());
+                        graph.add_edge(end_index, start_index, edge_way);
+                    }
+                }
+
+                if bidirectional && path_direction != Direction::Bidirectional {
+                    let reverse_way = edge_way_from_template(&filtered_way, length, speed_kph);
+                    match path_direction {
+                        Direction::OneWayForward => {
+                            graph.add_edge(end_index, start_index, reverse_way);
+                        }
+                        Direction::OneWayReverse => {
+                            graph.add_edge(start_index, end_index, reverse_way);
+                        }
+                        Direction::Bidirectional => {}
+                    }
                 }
             }
         }
     }
-
-    // Add distance as edge weights
-    add_edge_lengths(&mut graph);
-
-    // Standard OSM highway type speeds (kph), based on typical urban defaults.
-    // These apply when no maxspeed tag is present.
-    let hwy_speeds = HashMap::from([
-        ("motorway".to_string(),       110.0),
-        ("motorway_link".to_string(),   60.0),
-        ("trunk".to_string(),           90.0),
-        ("trunk_link".to_string(),      45.0),
-        ("primary".to_string(),         65.0),
-        ("primary_link".to_string(),    45.0),
-        ("secondary".to_string(),       55.0),
-        ("secondary_link".to_string(),  40.0),
-        ("tertiary".to_string(),        45.0),
-        ("tertiary_link".to_string(),   35.0),
-        ("unclassified".to_string(),    45.0),
-        ("residential".to_string(),     30.0),
-        ("living_street".to_string(),   10.0),
-        ("service".to_string(),         20.0),
-        ("track".to_string(),           20.0),
-        ("road".to_string(),            50.0),
-    ]);
-    let fallback_speed = 50.0;
-
-    add_edge_speeds(&mut graph, &hwy_speeds, fallback_speed);
-    add_edge_travel_times(&mut graph);
 
     // Simplify graph topology for faster downstream calculations
     // Consolidates distance and speed from
@@ -203,66 +247,22 @@ pub fn create_graph(
     graph
 }
 
-fn add_edge_lengths(graph: &mut DiGraph<XmlNode, XmlWay>) {
-    for edge in graph.edge_indices() {
-        let (start_index, end_index) = graph.edge_endpoints(edge).unwrap();
-        let start_node = &graph[start_index];
-        let end_node = &graph[end_index];
-
-        let distance =
-            calculate_distance(start_node.lat, start_node.lon, end_node.lat, end_node.lon);
-
-        let way = graph.edge_weight_mut(edge).unwrap();
-        way.length = distance;
-    }
-}
-
-fn add_edge_speeds(
-    graph: &mut DiGraph<XmlNode, XmlWay>,
-    hwy_speeds: &HashMap<String, f64>,
-    fallback: f64,
-) {
-    for edge in graph.edge_indices() {
-        let way = graph.edge_weight_mut(edge).unwrap();
-        let speed = way
-            .tags
-            .iter()
-            .find(|tag| tag.key == "maxspeed")
-            .map_or_else(
-                || {
-                    way.tags
-                        .iter()
-                        .find(|tag| tag.key == "highway")
-                        .and_then(|tag| hwy_speeds.get(&tag.value).copied())
-                        .unwrap_or(fallback)
-                },
-                |tag| clean_maxspeed(&tag.value),
-            );
-        way.speed_kph = speed;
-    }
-}
-
-fn clean_maxspeed(maxspeed: &str) -> f64 {
+fn clean_maxspeed(maxspeed: &str) -> Option<f64> {
     let mph_to_kph = 1.60934;
-    let speed = maxspeed.parse::<f64>().unwrap_or(0.0);
-    if maxspeed.to_lowercase().contains("mph") {
-        speed * mph_to_kph
-    } else {
-        speed
+    let trimmed = maxspeed.trim();
+    let numeric_prefix: String = trimmed
+        .chars()
+        .take_while(|c| c.is_ascii_digit() || *c == '.')
+        .collect();
+    let speed = numeric_prefix.parse::<f64>().ok()?;
+    if speed <= 0.0 {
+        return None;
     }
-}
 
-// Function to add travel times as an edge weight
-fn add_edge_travel_times(graph: &mut DiGraph<XmlNode, XmlWay>) {
-    for edge in graph.edge_indices() {
-        let way = graph.edge_weight_mut(edge).unwrap();
-        let walk_travel_time = calculate_travel_time(way.length, 5.0);
-        let bike_travel_time = calculate_travel_time(way.length, 15.0);
-        let drive_travel_time = calculate_travel_time(way.length, way.speed_kph);
-
-        way.walk_travel_time = walk_travel_time;
-        way.bike_travel_time = bike_travel_time;
-        way.drive_travel_time = drive_travel_time;
+    if trimmed.to_ascii_lowercase().contains("mph") {
+        Some(speed * mph_to_kph)
+    } else {
+        Some(speed)
     }
 }
 
@@ -285,6 +285,14 @@ impl RTreeObject for NodeEntry {
     }
 }
 
+fn spatial_index_point(lat: f64, lon: f64) -> [f64; 2] {
+    let meters_per_degree = 111_320.0;
+    [
+        lat * meters_per_degree,
+        lon * meters_per_degree * lat.to_radians().cos(),
+    ]
+}
+
 impl PointDistance for NodeEntry {
     fn distance_2(&self, point: &[f64; 2]) -> f64 {
         let dlat = self.point[0] - point[0];
@@ -293,31 +301,132 @@ impl PointDistance for NodeEntry {
     }
 }
 
-/// A graph bundled with a spatial index for O(log n) nearest-node queries.
-/// Build once via `SpatialGraph::new`, reuse for all lookups and routing.
-/// Both inner fields are reference-counted, so cloning a `SpatialGraph` is O(1).
+#[derive(Debug, Clone, Copy)]
+pub struct SnapResult {
+    pub input_lat: f64,
+    pub input_lon: f64,
+    pub node_index: NodeIndex,
+    pub node_id: i64,
+    pub node_lat: f64,
+    pub node_lon: f64,
+    pub distance_m: f64,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct SnappedPoi {
+    pub poi_id: i64,
+    pub snap: SnapResult,
+}
+
+/// A graph bundled with a spatial index for O(log n) nearest-node queries
+/// and an optional pre-computed POI snap map for O(1) POI filtering.
+///
+/// Build once via `SpatialGraph::new`, reuse for all queries. All inner
+/// fields are reference-counted so cloning is O(1).
 #[derive(Clone)]
 pub struct SpatialGraph {
     pub graph: Arc<DiGraph<XmlNode, XmlWay>>,
     tree: Arc<RTree<NodeEntry>>,
+    /// POI OSM node id → snapped graph node diagnostics, computed once at startup via
+    /// `snap_pois`. `None` until called; `Some` map used by POI filtering
+    /// for O(1) lookup instead of an R-tree query on every request.
+    pub poi_snaps: Option<Arc<HashMap<i64, SnappedPoi>>>,
 }
 
 impl SpatialGraph {
     pub fn new(graph: DiGraph<XmlNode, XmlWay>) -> Self {
-        let entries = graph.node_indices()
-            .map(|i| NodeEntry { point: [graph[i].lat, graph[i].lon], index: i })
+        let entries: Vec<NodeEntry> = graph
+            .node_indices()
+            .map(|i| NodeEntry {
+                point: spatial_index_point(graph[i].lat, graph[i].lon),
+                index: i,
+            })
             .collect();
         let tree = Arc::new(RTree::bulk_load(entries));
         let graph = Arc::new(graph);
-        Self { graph, tree }
+        Self {
+            graph,
+            tree,
+            poi_snaps: None,
+        }
+    }
+
+    pub(crate) fn from_parsed_osm(
+        data: XmlData,
+        network_type: crate::overpass::NetworkType,
+        retain_all: bool,
+    ) -> Self {
+        let bidirectional = matches!(network_type, crate::overpass::NetworkType::Walk);
+        let graph = create_graph(data.nodes, data.ways, retain_all, bidirectional);
+        Self::new(graph)
+    }
+
+    /// Parse an OSM XML response and build a [`SpatialGraph`].
+    pub fn from_osm(
+        xml: &str,
+        network_type: crate::overpass::NetworkType,
+        retain_all: Option<bool>,
+    ) -> Result<Self, quick_xml::DeError> {
+        let data = parse_xml(xml)?;
+        Ok(Self::from_parsed_osm(
+            data,
+            network_type,
+            retain_all.unwrap_or(false),
+        ))
+    }
+
+    /// Pre-snap a set of POI nodes to their nearest graph nodes, storing the
+    /// result for O(1) lookup at request time.
+    ///
+    /// `pois` is the POI list returned by [`crate::pbf::read_pbf`]. Call once
+    /// at startup after `new`.
+    pub fn snap_pois(&mut self, pois: &[crate::poi::Poi]) {
+        let snaps: HashMap<i64, SnappedPoi> = pois
+            .iter()
+            .filter_map(|poi| {
+                self.snap_point(poi.lat, poi.lon).map(|snap| {
+                    (
+                        poi.id,
+                        SnappedPoi {
+                            poi_id: poi.id,
+                            snap,
+                        },
+                    )
+                })
+            })
+            .collect();
+        self.poi_snaps = Some(Arc::new(snaps));
     }
 
     pub fn nearest_node(&self, lat: f64, lon: f64) -> Option<NodeIndex> {
-        self.tree.nearest_neighbor(&[lat, lon]).map(|e| e.index)
+        self.tree
+            .nearest_neighbor(&spatial_index_point(lat, lon))
+            .map(|e| e.index)
+    }
+
+    pub fn snap_point(&self, lat: f64, lon: f64) -> Option<SnapResult> {
+        self.nearest_node(lat, lon).map(|node_index| {
+            let node = &self.graph[node_index];
+            SnapResult {
+                input_lat: lat,
+                input_lon: lon,
+                node_index,
+                node_id: node.id,
+                node_lat: node.lat,
+                node_lon: node.lon,
+                distance_m: calculate_distance(lat, lon, node.lat, node.lon),
+            }
+        })
     }
 }
 
 // Keep the free function for backwards compatibility but delegate to SpatialGraph
+// NOTE: this clones the entire graph to build a temporary R-tree — prefer
+// constructing a `SpatialGraph` directly and reusing it.
+#[deprecated(
+    since = "0.0.0",
+    note = "construct a SpatialGraph and call nearest_node instead"
+)]
 pub fn latlon_to_node(graph: &DiGraph<XmlNode, XmlWay>, lat: f64, lon: f64) -> Option<NodeIndex> {
     SpatialGraph::new(graph.clone()).nearest_node(lat, lon)
 }
@@ -327,32 +436,98 @@ mod tests {
     use super::*;
 
     fn make_node(id: i64, lat: f64, lon: f64) -> XmlNode {
-        XmlNode { id, lat, lon, tags: vec![], geohash: None }
+        XmlNode {
+            id,
+            lat,
+            lon,
+            tags: vec![],
+        }
     }
 
     fn make_way_raw(node_ids: Vec<i64>, tags: Vec<(&str, &str)>) -> XmlWay {
         XmlWay {
             id: 1,
-            nodes: node_ids.into_iter().map(|id| XmlNodeRef { node_id: id }).collect(),
-            tags: tags.into_iter().map(|(k, v)| XmlTag { key: k.into(), value: v.into() }).collect(),
-            length: 0.0, speed_kph: 0.0,
-            walk_travel_time: 0.0, bike_travel_time: 0.0, drive_travel_time: 0.0,
+            nodes: node_ids
+                .into_iter()
+                .map(|id| XmlNodeRef { node_id: id })
+                .collect(),
+            tags: tags
+                .into_iter()
+                .map(|(k, v)| XmlTag {
+                    key: k.into(),
+                    value: v.into(),
+                })
+                .collect(),
+            length: 0.0,
+            speed_kph: 0.0,
+            walk_travel_time: 0.0,
+            bike_travel_time: 0.0,
+            drive_travel_time: 0.0,
         }
     }
 
     #[test]
     fn test_graph_respects_maxspeed_tag() {
         let nodes = vec![make_node(1, 0.0, 0.0), make_node(2, 0.001, 0.0)];
-        let way = make_way_raw(vec![1, 2], vec![("highway", "residential"), ("maxspeed", "30")]);
-        let graph = create_graph(vec![nodes[0].clone(), nodes[1].clone()], vec![way], true, false);
+        let way = make_way_raw(
+            vec![1, 2],
+            vec![("highway", "residential"), ("maxspeed", "30")],
+        );
+        let graph = create_graph(
+            vec![nodes[0].clone(), nodes[1].clone()],
+            vec![way],
+            true,
+            false,
+        );
+        assert_eq!(graph.edge_weights().next().unwrap().speed_kph, 30.0);
+    }
+
+    #[test]
+    fn test_graph_parses_mph_maxspeed_tag() {
+        let nodes = vec![make_node(1, 0.0, 0.0), make_node(2, 0.001, 0.0)];
+        let way = make_way_raw(
+            vec![1, 2],
+            vec![("highway", "residential"), ("maxspeed", "30 mph")],
+        );
+        let graph = create_graph(
+            vec![nodes[0].clone(), nodes[1].clone()],
+            vec![way],
+            true,
+            false,
+        );
+        let speed = graph.edge_weights().next().unwrap().speed_kph;
+        assert!((speed - 48.2802).abs() < 1e-4);
+    }
+
+    #[test]
+    fn test_graph_falls_back_when_maxspeed_is_non_numeric() {
+        let nodes = vec![make_node(1, 0.0, 0.0), make_node(2, 0.001, 0.0)];
+        let way = make_way_raw(
+            vec![1, 2],
+            vec![("highway", "residential"), ("maxspeed", "signals")],
+        );
+        let graph = create_graph(
+            vec![nodes[0].clone(), nodes[1].clone()],
+            vec![way],
+            true,
+            false,
+        );
         assert_eq!(graph.edge_weights().next().unwrap().speed_kph, 30.0);
     }
 
     #[test]
     fn test_oneway_produces_single_edge() {
         let nodes = vec![make_node(1, 0.0, 0.0), make_node(2, 0.001, 0.0)];
-        let way = make_way_raw(vec![1, 2], vec![("highway", "residential"), ("oneway", "yes")]);
-        let graph = create_graph(vec![nodes[0].clone(), nodes[1].clone()], vec![way], true, false);
+        let way = make_way_raw(
+            vec![1, 2],
+            vec![("highway", "residential"), ("oneway", "yes")],
+        );
+        let graph = create_graph(
+            vec![nodes[0].clone(), nodes[1].clone()],
+            vec![way],
+            true,
+            false,
+        );
         assert_eq!(graph.edge_count(), 1);
     }
 
@@ -360,7 +535,12 @@ mod tests {
     fn test_bidirectional_produces_two_edges() {
         let nodes = vec![make_node(1, 0.0, 0.0), make_node(2, 0.001, 0.0)];
         let way = make_way_raw(vec![1, 2], vec![("highway", "residential")]);
-        let graph = create_graph(vec![nodes[0].clone(), nodes[1].clone()], vec![way], true, false);
+        let graph = create_graph(
+            vec![nodes[0].clone(), nodes[1].clone()],
+            vec![way],
+            true,
+            false,
+        );
         assert_eq!(graph.edge_count(), 2);
     }
 
@@ -372,5 +552,19 @@ mod tests {
         let sg = SpatialGraph::new(graph);
         let idx = sg.nearest_node(48.001, 11.001).unwrap();
         assert_eq!(sg.graph[idx].id, 1);
+    }
+
+    #[test]
+    fn test_snap_point_returns_diagnostics() {
+        let mut graph = DiGraph::new();
+        graph.add_node(make_node(1, 48.0, 11.0));
+        let sg = SpatialGraph::new(graph);
+
+        let snap = sg.snap_point(48.001, 11.001).unwrap();
+
+        assert_eq!(snap.node_id, 1);
+        assert_eq!(snap.node_lat, 48.0);
+        assert_eq!(snap.node_lon, 11.0);
+        assert!(snap.distance_m > 0.0);
     }
 }

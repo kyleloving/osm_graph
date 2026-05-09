@@ -8,7 +8,7 @@ lets you run isochrones from many different origin points over the same network
 without re-fetching data.
 
 ```python
-graph = pysochrone.build_graph(48.137144, 11.575399, "Drive", max_dist=10_000)
+graph = graphways.build_graph(48.137144, 11.575399, "Drive", max_dist=10_000)
 print(graph)  # Graph(nodes=6251, edges=15356, network_type=Drive)
 ```
 
@@ -59,37 +59,31 @@ print(f"Snapped to OSM node {osm_id} at ({node_lat:.6f}, {node_lon:.6f})")
 
 ## Isochrones
 
-### `isochrones`
+### `isochrone`
 
 ```python
-graph.isochrones(
-    lat: float,
-    lon: float,
-    time_limits: list[float],
-    hull_type: str = "Concave",
+graph.isochrone(
+    origin: tuple[float, float],`r`n    minutes: list[float],
 ) -> list[str]
 ```
 
-Compute isochrones from `(lat, lon)` using the travel times of this graph's network type.
+Compute isochrones from an origin using the travel times of this graph's network type.
 
-One Dijkstra pass is run from the nearest graph node; one hull polygon per time
-limit is computed in parallel threads.
+One Dijkstra pass is run from the nearest graph node; one triangulated contour
+polygon is computed per time limit.
 
 **Parameters**
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `lat` | `float` | — | Origin latitude |
-| `lon` | `float` | — | Origin longitude |
-| `time_limits` | `list[float]` | — | Travel-time thresholds in **seconds** |
-| `hull_type` | `str` | `"Concave"` | `"Convex"` \| `"FastConcave"` \| `"Concave"` |
+| `origin` | `tuple[float, float]` | - | `(lat, lon)` origin |`r`n| `minutes` | `list[float]` | - | Travel-time thresholds in minutes |
 
-**Returns** `list[str]` — one GeoJSON geometry string per time limit, in the same order as `time_limits`
+**Returns** `list[str]` — one GeoJSON geometry string per time limit, in the same order as `minutes`
 
 **Example**
 
 ```python
-isos = graph.isochrones(48.137144, 11.575399, [300, 600, 900, 1200], "Concave")
+isos = graph.isochrone((48.137144, 11.575399), minutes=[5, 10, 15, 20])
 ```
 
 ---
@@ -100,10 +94,7 @@ isos = graph.isochrones(48.137144, 11.575399, [300, 600, 900, 1200], "Concave")
 
 ```python
 graph.route(
-    origin_lat: float,
-    origin_lon: float,
-    dest_lat: float,
-    dest_lon: float,
+    origin: tuple[float, float],`r`n    destination: tuple[float, float],
 ) -> str
 ```
 
@@ -117,10 +108,7 @@ nearest in-graph node is used as a proxy.
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `origin_lat` | `float` | Origin latitude |
-| `origin_lon` | `float` | Origin longitude |
-| `dest_lat` | `float` | Destination latitude |
-| `dest_lon` | `float` | Destination longitude |
+| `origin` | `tuple[float, float]` | `(lat, lon)` origin |`r`n| `destination` | `tuple[float, float]` | `(lat, lon)` destination |
 
 **Returns** `str` — GeoJSON `Feature` (LineString) with properties:
 
@@ -135,7 +123,7 @@ nearest in-graph node is used as a proxy.
 ```python
 import json
 
-route_str = graph.route(48.137144, 11.575399, 48.154560, 11.530840)
+route_str = graph.route((48.137144, 11.575399), (48.154560, 11.530840))
 route = json.loads(route_str)
 props = route["properties"]
 coords = route["geometry"]["coordinates"]  # [[lon, lat], ...]
@@ -164,7 +152,7 @@ returned nodes to those geometrically inside the polygon.
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `isochrone_geojson` | `str` | A GeoJSON geometry string (typically from `graph.isochrones(...)`) |
+| `isochrone_geojson` | `str` | A GeoJSON geometry string (typically from `graph.isochrone(...)`) |
 
 **Returns** `str` — GeoJSON `FeatureCollection` where each `Feature` is a POI `Point`
 with raw OSM tags as properties.
@@ -174,7 +162,7 @@ with raw OSM tags as properties.
 ```python
 import json
 
-isos = graph.isochrones(48.137144, 11.575399, [600], "Concave")
+isos = graph.isochrone((48.137144, 11.575399), minutes=[10])
 pois_str = graph.fetch_pois(isos[0])
 pois = json.loads(pois_str)
 

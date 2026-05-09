@@ -3,8 +3,7 @@ import time
 
 import branca.colormap
 import folium
-import pysochrone
-
+import graphways
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -24,7 +23,7 @@ def isochrone_example():
     """Walking isochrones from Marienplatz with graduated colour by time band."""
     place = "Marienplatz, Munich, Germany"
     print(f"Geocoding '{place}'...")
-    lat, lon = pysochrone.geocode(place)
+    lat, lon = graphways.geocode(place)
     print(f"  -> ({lat:.6f}, {lon:.6f})")
 
     time_limits = [300, 600, 900, 1200, 1500, 1800]  # 5–30 min in 5-min steps
@@ -32,7 +31,7 @@ def isochrone_example():
     labels = [f"{minutes(t)} walk" for t in time_limits]
 
     t0 = time.time()
-    isochrones = pysochrone.calc_isochrones(lat, lon, time_limits, "Walk", "Concave")
+    isochrones = graphways.calc_isochrones(lat, lon, time_limits, "Walk")
     print(f"  Computed {len(isochrones)} isochrones in {time.time() - t0:.2f}s")
 
     m = folium.Map(location=[lat, lon], zoom_start=14, tiles="Cartodb Positron")
@@ -63,13 +62,13 @@ def routing_example():
     dest_place = "English Garden, Munich, Germany"
 
     print("Geocoding origin and destination...")
-    origin = pysochrone.geocode(origin_place)
-    dest = pysochrone.geocode(dest_place)
+    origin = graphways.geocode(origin_place)
+    dest = graphways.geocode(dest_place)
     print(f"  Origin: {origin}")
     print(f"  Dest:   {dest}")
 
     t0 = time.time()
-    route_geojson = pysochrone.calc_route(
+    route_geojson = graphways.calc_route(
         origin[0],
         origin[1],
         dest[0],
@@ -145,13 +144,13 @@ def isochrone_and_route_example():
     dest_place = "Olympiapark, Munich, Germany"
 
     print("Geocoding...")
-    origin = pysochrone.geocode(origin_place)
-    dest = pysochrone.geocode(dest_place)
+    origin = graphways.geocode(origin_place)
+    dest = graphways.geocode(dest_place)
 
-    isochrones = pysochrone.calc_isochrones(
-        origin[0], origin[1], [300, 600, 900], "Walk", "Concave"
+    isochrones = graphways.calc_isochrones(
+        origin[0], origin[1], [300, 600, 900], "Walk"
     )
-    route_geojson = pysochrone.calc_route(
+    route_geojson = graphways.calc_route(
         origin[0], origin[1], dest[0], dest[1], "Drive"
     )
     route = json.loads(route_geojson)
@@ -217,14 +216,37 @@ def isochrone_and_route_example():
     print("  Saved to combined_example.html")
 
 
+def network_example():
+
+    graph = graphways.build_graph(48.137144, 11.575399, "Drive", max_dist=3_000)
+    edges = json.loads(graph.edges_geojson())
+
+    m = folium.Map(location=[48.137, 11.575], zoom_start=14, tiles="Cartodb Positron")
+    folium.GeoJson(
+        edges,
+        style_function=lambda f: {
+            "color": (
+                "#e74c3c" if f["properties"]["highway"] == "motorway" else "#3498db"
+            ),
+            "weight": 2,
+            "opacity": 0.6,
+        },
+        tooltip=folium.GeoJsonTooltip(["highway", "length_m", "speed_kph"]),
+    ).add_to(m)
+    m.save("network_example.html")
+
+
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    # print("=== Isochrone example ===")
-    # isochrone_example()
+    print("=== Isochrone example ===")
+    isochrone_example()
 
     # print("\n=== Routing example ===")
     # routing_example()
 
-    print("\n=== Combined example ===")
-    isochrone_and_route_example()
+    # print("\n=== Combined example ===")
+    # isochrone_and_route_example()
+
+    # print("\n=== Network example ===")
+    # network_example()

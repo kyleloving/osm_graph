@@ -2,7 +2,7 @@ use geo::Polygon;
 use geojson::{GeoJson, Geometry, Value};
 
 pub fn calculate_distance(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
-    let radius_earth = 6371000.0; // Radius of the Earth in meters
+    const EARTH_RADIUS_M: f64 = 6_371_000.0;
 
     let dlat = (lat2 - lat1).to_radians();
     let dlon = (lon2 - lon1).to_radians();
@@ -11,27 +11,34 @@ pub fn calculate_distance(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
     let lat2 = lat2.to_radians();
 
     let a = (dlat / 2.0).sin().powi(2) + (dlon / 2.0).sin().powi(2) * lat1.cos() * lat2.cos();
-    let c = 2.0 * a.sqrt().asin();
+    let c = 2.0 * a.sqrt().min(1.0).asin();
 
-    radius_earth * c // Distance in meters
+    EARTH_RADIUS_M * c
 }
 
 pub fn calculate_travel_time(length: f64, speed_kph: f64) -> f64 {
+    if !length.is_finite() || !speed_kph.is_finite() || length < 0.0 || speed_kph <= 0.0 {
+        return f64::INFINITY;
+    }
     let speed_m_per_s = speed_kph / 3.6;
-    length / speed_m_per_s // Returns time in seconds
+    length / speed_m_per_s
+}
+
+fn ring_to_geojson_coords(ring: &geo::LineString<f64>) -> Vec<Vec<f64>> {
+    ring.0
+        .iter()
+        .map(|coord| vec![coord.y, coord.x])
+        .collect::<Vec<_>>()
 }
 
 pub fn polygon_to_geojson(polygon: &Polygon<f64>) -> GeoJson {
     // node_to_latlon returns (lat, lon) tuples which geo stores as (x=lat, y=lon).
     // GeoJSON spec requires [longitude, latitude], so coord.y = lon, coord.x = lat.
-    let exterior_coords = polygon
-        .exterior()
-        .0
-        .iter()
-        .map(|coord| vec![coord.y, coord.x]) // [lon, lat] per GeoJSON spec
-        .collect::<Vec<_>>();
+    let mut rings = Vec::with_capacity(1 + polygon.interiors().len());
+    rings.push(ring_to_geojson_coords(polygon.exterior()));
+    rings.extend(polygon.interiors().iter().map(ring_to_geojson_coords));
 
-    let geojson_polygon = Geometry::new(Value::Polygon(vec![exterior_coords]));
+    let geojson_polygon = Geometry::new(Value::Polygon(rings));
 
     GeoJson::Geometry(geojson_polygon)
 }
@@ -78,5 +85,41 @@ mod tests {
         // 500m at 5 kph = 360 seconds
         let t = calculate_travel_time(500.0, 5.0);
         assert!((t - 360.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_travel_time_rejects_invalid_speed() {
+        assert!(calculate_travel_time(500.0, 0.0).is_infinite());
+        assert!(calculate_travel_time(500.0, -10.0).is_infinite());
+    }
+
+    #[test]
+    fn test_polygon_to_geojson_preserves_interiors() {
+        let exterior = geo::LineString::from(vec![
+            (0.0, 0.0),
+            (10.0, 0.0),
+            (10.0, 10.0),
+            (0.0, 10.0),
+            (0.0, 0.0),
+        ]);
+        let hole = geo::LineString::from(vec![
+            (2.0, 2.0),
+            (3.0, 2.0),
+            (3.0, 3.0),
+            (2.0, 3.0),
+            (2.0, 2.0),
+        ]);
+        let polygon = Polygon::new(exterior, vec![hole]);
+        let geojson = polygon_to_geojson(&polygon);
+
+        if let GeoJson::Geometry(Geometry {
+            value: Value::Polygon(rings),
+            ..
+        }) = geojson
+        {
+            assert_eq!(rings.len(), 2);
+        } else {
+            panic!("expected GeoJSON polygon");
+        }
     }
 }

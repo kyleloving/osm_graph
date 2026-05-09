@@ -26,17 +26,15 @@ pub fn route(
     dest_lon: f64,
     network_type: NetworkType,
 ) -> Result<Route, OsmGraphError> {
-    let origin = sg.nearest_node(origin_lat, origin_lon).ok_or(OsmGraphError::NodeNotFound)?;
-    let dest = sg.nearest_node(dest_lat, dest_lon).ok_or(OsmGraphError::NodeNotFound)?;
+    let origin = sg
+        .nearest_node(origin_lat, origin_lon)
+        .ok_or(OsmGraphError::OriginNodeNotFound)?;
+    let dest = sg
+        .nearest_node(dest_lat, dest_lon)
+        .ok_or(OsmGraphError::DestinationNodeNotFound)?;
 
-    let edge_cost = |e: petgraph::graph::EdgeReference<XmlWay>| -> f64 {
-        let way = e.weight();
-        match network_type {
-            NetworkType::Walk => way.walk_travel_time,
-            NetworkType::Bike => way.bike_travel_time,
-            _ => way.drive_travel_time,
-        }
-    };
+    let edge_cost =
+        |e: petgraph::graph::EdgeReference<XmlWay>| -> f64 { e.weight().travel_time(network_type) };
 
     // Heuristic: straight-line travel time from node to destination
     let heuristic = |node: NodeIndex| -> f64 {
@@ -49,7 +47,7 @@ pub fn route(
     };
 
     let result = astar(&*sg.graph, origin, |n| n == dest, edge_cost, heuristic)
-        .ok_or(OsmGraphError::NodeNotFound)?; // no path found
+        .ok_or(OsmGraphError::PathNotFound)?;
 
     let (_, path) = result;
 
@@ -70,17 +68,44 @@ pub fn route(
             if let Some(edge) = sg.graph.find_edge(*u, *v) {
                 let way = sg.graph.edge_weight(edge).unwrap();
                 distance_m += way.length;
-                duration_s += match network_type {
-                    NetworkType::Walk => way.walk_travel_time,
-                    NetworkType::Bike => way.bike_travel_time,
-                    _ => way.drive_travel_time,
-                };
+                duration_s += way.travel_time(network_type);
                 cumulative_times_s.push(duration_s);
             }
         }
     }
 
-    Ok(Route { coordinates, cumulative_times_s, distance_m, duration_s })
+    Ok(Route {
+        coordinates,
+        cumulative_times_s,
+        distance_m,
+        duration_s,
+    })
+}
+
+impl SpatialGraph {
+    /// Find the shortest route between two lat/lon points.
+    ///
+    /// Snaps both points to the nearest graph nodes, then runs A* to find the
+    /// optimal path. Returns [`OsmGraphError::OriginNodeNotFound`] or
+    /// [`OsmGraphError::DestinationNodeNotFound`] if snapping fails, and
+    /// [`OsmGraphError::PathNotFound`] if the snapped nodes are disconnected.
+    pub fn route(
+        &self,
+        origin_lat: f64,
+        origin_lon: f64,
+        dest_lat: f64,
+        dest_lon: f64,
+        network_type: NetworkType,
+    ) -> Result<Route, OsmGraphError> {
+        route(
+            self,
+            origin_lat,
+            origin_lon,
+            dest_lat,
+            dest_lon,
+            network_type,
+        )
+    }
 }
 
 #[cfg(test)]
@@ -91,14 +116,22 @@ mod tests {
     use petgraph::graph::DiGraph;
 
     fn make_node(id: i64, lat: f64, lon: f64) -> XmlNode {
-        XmlNode { id, lat, lon, tags: vec![], geohash: None }
+        XmlNode {
+            id,
+            lat,
+            lon,
+            tags: vec![],
+        }
     }
 
     fn make_way(drive_travel_time: f64, length: f64) -> XmlWay {
         XmlWay {
             id: 1,
             nodes: vec![],
-            tags: vec![XmlTag { key: "highway".into(), value: "residential".into() }],
+            tags: vec![XmlTag {
+                key: "highway".into(),
+                value: "residential".into(),
+            }],
             length,
             speed_kph: 50.0,
             walk_travel_time: length / (5.0 / 3.6),
@@ -110,7 +143,7 @@ mod tests {
     fn linear_graph() -> SpatialGraph {
         // A → B → C along a straight line
         let mut g = DiGraph::new();
-        let a = g.add_node(make_node(1, 0.0,   0.0));
+        let a = g.add_node(make_node(1, 0.0, 0.0));
         let b = g.add_node(make_node(2, 0.001, 0.0));
         let c = g.add_node(make_node(3, 0.002, 0.0));
         g.add_edge(a, b, make_way(10.0, 111.0));
@@ -148,7 +181,8 @@ mod tests {
         let last = *r.cumulative_times_s.last().unwrap();
         assert!(
             (last - r.duration_s).abs() < 1e-6,
-            "last cumulative time {last:.6} != duration {:.6}", r.duration_s
+            "last cumulative time {last:.6} != duration {:.6}",
+            r.duration_s
         );
     }
 }

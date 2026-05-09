@@ -9,16 +9,16 @@ and caches the graph, so the first call for an area is slow (network I/O) and
 subsequent calls are fast (cache hit).
 
 ```python
-import pysochrone
+import graphways
 
 # Geocode a place name
-lat, lon = pysochrone.geocode("Marienplatz, Munich, Germany")
+lat, lon = graphways.geocode("Marienplatz, Munich, Germany")
 
 # Isochrones: 5, 10, 15, 20 minutes driving
-isos = pysochrone.calc_isochrones(lat, lon, [300, 600, 900, 1200], "Drive", "Concave")
+isos = graphways.calc_isochrones(lat, lon, [300, 600, 900, 1200], "Drive")
 
 # Route between two points
-route = pysochrone.calc_route(lat, lon, 48.154560, 11.530840, "Drive")
+route = graphways.calc_route(lat, lon, 48.154560, 11.530840, "Drive")
 ```
 
 ### Stateful Graph object (multiple queries over the same area)
@@ -27,15 +27,15 @@ route = pysochrone.calc_route(lat, lon, 48.154560, 11.530840, "Drive")
 lookups without re-loading data from the cache each time.
 
 ```python
-import pysochrone
+import graphways
 
-graph = pysochrone.build_graph(48.137144, 11.575399, "Drive", max_dist=10_000)
+graph = graphways.build_graph(48.137144, 11.575399, "Drive", max_dist=10_000)
 print(graph)  # Graph(nodes=6251, edges=15356, network_type=Drive)
 
 # Compute isochrones for multiple origin points using the same graph
 origins = [(48.137144, 11.575399), (48.154560, 11.530840)]
 for lat, lon in origins:
-    isos = graph.isochrones(lat, lon, [300, 600, 900], "Concave")
+    isos = graph.isochrone((lat, lon), minutes=[5, 10, 15])
     pois = graph.fetch_pois(isos[-1])  # POIs within the largest isochrone
 ```
 
@@ -90,15 +90,13 @@ for feature in pois_data["features"]:
 
 | Value | Shape | Speed | Best for |
 |-------|-------|-------|----------|
-| `"Convex"` | Convex polygon | Fastest | Quick overviews, simple analytics |
-| `"FastConcave"` | Approx. concave | Fast | Good balance |
-| `"Concave"` | Tight concave | Slowest | Accurate reachability maps |
+Isochrone polygons use triangulated travel-time contour extraction by default.
 
 ---
 
 ## Caching
 
-pysochrone uses a three-level cache so repeated queries skip the network entirely:
+graphways uses a three-level cache so repeated queries skip the network entirely:
 
 ```
 Overpass API (network) → disk XML → in-memory XML → in-memory graph
@@ -107,8 +105,8 @@ Overpass API (network) → disk XML → in-memory XML → in-memory graph
 Each level persists across process restarts (disk) or within a session (memory).
 
 ```python
-print(pysochrone.cache_dir())  # shows the disk cache location
-pysochrone.clear_cache()       # wipe all three levels
+print(graphways.cache_dir())  # shows the disk cache location
+graphways.clear_cache()       # wipe all three levels
 ```
 
-Set `OSM_GRAPH_CACHE_DIR` to override the default cache location.
+Set `graphways_CACHE_DIR` to override the default cache location.

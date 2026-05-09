@@ -1,31 +1,31 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
-         <loc>https://kyleloving.github.io/osm_graph/</loc>
-         <lastmod>2026-05-03</lastmod>
+         <loc>https://kyleloving.github.io/graphways/</loc>
+         <lastmod>2026-05-09</lastmod>
     </url>
     <url>
-         <loc>https://kyleloving.github.io/osm_graph/examples/</loc>
-         <lastmod>2026-05-03</lastmod>
+         <loc>https://kyleloving.github.io/graphways/examples/</loc>
+         <lastmod>2026-05-09</lastmod>
     </url>
     <url>
-         <loc>https://kyleloving.github.io/osm_graph/installation/</loc>
-         <lastmod>2026-05-03</lastmod>
+         <loc>https://kyleloving.github.io/graphways/installation/</loc>
+         <lastmod>2026-05-09</lastmod>
     </url>
     <url>
-         <loc>https://kyleloving.github.io/osm_graph/python-api/</loc>
-         <lastmod>2026-05-03</lastmod>
+         <loc>https://kyleloving.github.io/graphways/python-api/</loc>
+         <lastmod>2026-05-09</lastmod>
     </url>
     <url>
-         <loc>https://kyleloving.github.io/osm_graph/python-graph/</loc>
-         <lastmod>2026-05-03</lastmod>
+         <loc>https://kyleloving.github.io/graphways/python-graph/</loc>
+         <lastmod>2026-05-09</lastmod>
     </url>
     <url>
-         <loc>https://kyleloving.github.io/osm_graph/quickstart/</loc>
-         <lastmod>2026-05-03</lastmod>
+         <loc>https://kyleloving.github.io/graphways/quickstart/</loc>
+         <lastmod>2026-05-09</lastmod>
     </url>
     <url>
-         <loc>https://kyleloving.github.io/osm_graph/rust-api/</loc>
-         <lastmod>2026-05-03</lastmod>
+         <loc>https://kyleloving.github.io/graphways/rust-api/</loc>
+         <lastmod>2026-05-09</lastmod>
     </url>
 </urlset>

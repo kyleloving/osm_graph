@@ -4,14 +4,51 @@ build-backend = "maturin"
 
 [project]
 name = "graphways"
+description = "Fast OpenStreetMap reachability, routing, and isochrones from Python, powered by Rust."
+readme = "README.md"
 requires-python = ">=3.8"
+license = { file = "LICENSE" }
+keywords = [
+    "openstreetmap",
+    "osm",
+    "geospatial",
+    "gis",
+    "routing",
+    "isochrone",
+    "reachability",
+    "accessibility",
+    "rust",
+]
 classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
     "Programming Language :: Rust",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: Implementation :: CPython",
-    "Programming Language :: Python :: Implementation :: PyPy",
+    "Topic :: Scientific/Engineering :: GIS",
+    "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dynamic = ["version"]
 
+[project.urls]
+Documentation = "https://kyleloving.github.io/graphways/"
+Homepage = "https://github.com/kyleloving/graphways"
+Issues = "https://github.com/kyleloving/graphways/issues"
+Repository = "https://github.com/kyleloving/graphways"
+
 [tool.maturin]
+bindings = "pyo3"
 features = ["extension-module"]
 include = ["graphways.pyi"]
+strip = true

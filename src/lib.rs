@@ -34,9 +34,14 @@ use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyDict, PyList};
 
 #[cfg(feature = "extension-module")]
-lazy_static::lazy_static! {
-    static ref TOKIO_RT: tokio::runtime::Runtime =
-        tokio::runtime::Runtime::new().expect("failed to create tokio runtime");
+use std::sync::OnceLock;
+
+#[cfg(feature = "extension-module")]
+static TOKIO_RT: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
+
+#[cfg(feature = "extension-module")]
+fn tokio_rt() -> &'static tokio::runtime::Runtime {
+    TOKIO_RT.get_or_init(|| tokio::runtime::Runtime::new().expect("failed to create tokio runtime"))
 }
 
 // ---------------------------------------------------------------------------
@@ -459,8 +464,8 @@ impl PyGraph {
         retain_all: bool,
     ) -> PyResult<Self> {
         let nt = parse_network_type(&network)?;
-        let (lat, lon) = TOKIO_RT.block_on(geocoding::geocode(&place))?;
-        let (_, sg) = TOKIO_RT.block_on(isochrone::calculate_isochrones_from_point(
+        let (lat, lon) = tokio_rt().block_on(geocoding::geocode(&place))?;
+        let (_, sg) = tokio_rt().block_on(isochrone::calculate_isochrones_from_point(
             lat,
             lon,
             Some(max_dist.unwrap_or(5_000.0)),
@@ -555,7 +560,7 @@ impl PyGraph {
             ));
         };
         let polygon = poi::parse_isochrone(&isochrone_geojson)?;
-        let pois = TOKIO_RT.block_on(poi::fetch_pois_within(&polygon))?;
+        let pois = tokio_rt().block_on(poi::fetch_pois_within(&polygon))?;
         Ok(PyPoiCollection { pois })
     }
 
@@ -1298,7 +1303,7 @@ impl PyPrismGraph {
 #[cfg(feature = "extension-module")]
 #[pyfunction]
 fn geocode(place: String) -> PyResult<(f64, f64)> {
-    Ok(TOKIO_RT.block_on(geocoding::geocode(&place))?)
+    Ok(tokio_rt().block_on(geocoding::geocode(&place))?)
 }
 
 #[cfg(feature = "extension-module")]

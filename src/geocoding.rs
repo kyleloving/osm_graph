@@ -1,6 +1,6 @@
 use crate::error::OsmGraphError;
 use crate::overpass::{
-    is_retryable_status, nominatim_url, retry_delay, user_agent, wait_for_nominatim_slot, CLIENT,
+    client, is_retryable_status, nominatim_url, retry_delay, user_agent, wait_for_nominatim_slot,
 };
 use serde::Deserialize;
 
@@ -19,7 +19,7 @@ pub async fn geocode(place: &str) -> Result<(f64, f64), OsmGraphError> {
 
     for attempt in 0..=2 {
         wait_for_nominatim_slot().await;
-        let response = CLIENT
+        let response = client()
             .get(&url)
             .query(&[("q", place), ("format", "json"), ("limit", "1")])
             .header("User-Agent", user_agent())

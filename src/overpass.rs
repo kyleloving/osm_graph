@@ -1,6 +1,6 @@
 // Define an enum for network types
 use reqwest::header::{HeaderMap, RETRY_AFTER};
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
 
@@ -67,14 +67,26 @@ pub fn create_overpass_query(polygon_coord_str: &str, network_type: NetworkType)
     )
 }
 
-// Reuse a single reqwest::Client across all HTTP calls in the library
-lazy_static::lazy_static! {
-    pub(crate) static ref CLIENT: reqwest::Client = reqwest::Client::builder()
-        .user_agent(user_agent())
-        .build()
-        .expect("failed to build HTTP client");
-    static ref OVERPASS_LAST_REQUEST: Mutex<Option<Instant>> = Mutex::new(None);
-    static ref NOMINATIM_LAST_REQUEST: Mutex<Option<Instant>> = Mutex::new(None);
+static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+static OVERPASS_LAST_REQUEST: OnceLock<Mutex<Option<Instant>>> = OnceLock::new();
+static NOMINATIM_LAST_REQUEST: OnceLock<Mutex<Option<Instant>>> = OnceLock::new();
+
+// Reuse a single reqwest::Client across all HTTP calls in the library.
+pub(crate) fn client() -> &'static reqwest::Client {
+    CLIENT.get_or_init(|| {
+        reqwest::Client::builder()
+            .user_agent(user_agent())
+            .build()
+            .expect("failed to build HTTP client")
+    })
+}
+
+fn overpass_last_request() -> &'static Mutex<Option<Instant>> {
+    OVERPASS_LAST_REQUEST.get_or_init(|| Mutex::new(None))
+}
+
+fn nominatim_last_request() -> &'static Mutex<Option<Instant>> {
+    NOMINATIM_LAST_REQUEST.get_or_init(|| Mutex::new(None))
 }
 
 pub(crate) fn user_agent() -> String {
@@ -135,18 +147,18 @@ pub(crate) async fn retry_delay(headers: &HeaderMap, attempt: usize) {
 }
 
 pub(crate) async fn wait_for_nominatim_slot() {
-    wait_for_slot(&NOMINATIM_LAST_REQUEST, Duration::from_secs(1)).await;
+    wait_for_slot(nominatim_last_request(), Duration::from_secs(1)).await;
 }
 
 async fn wait_for_overpass_slot() {
-    wait_for_slot(&OVERPASS_LAST_REQUEST, Duration::from_millis(250)).await;
+    wait_for_slot(overpass_last_request(), Duration::from_millis(250)).await;
 }
 
 // Function to make request to Overpass API
 pub async fn make_request(url: &str, query: &str) -> Result<String, reqwest::Error> {
     for attempt in 0..=MAX_RETRIES {
         wait_for_overpass_slot().await;
-        let response = CLIENT
+        let response = client()
             .post(url)
             .header("User-Agent", user_agent())
             .form(&[("data", query)])

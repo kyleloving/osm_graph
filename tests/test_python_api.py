@@ -1,0 +1,94 @@
+import json
+import unittest
+from pathlib import Path
+
+import graphways as gw
+
+
+FIXTURES = Path(__file__).parent / "fixtures"
+
+
+class PythonApiTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        xml = (FIXTURES / "tiny_map.osm").read_text(encoding="utf-8")
+        cls.graph = gw.SpatialGraph.from_osm(xml, "walk")
+
+    def test_route_returns_structured_result(self):
+        route = self.graph.route((48.0, 11.0), (48.001, 11.0))
+
+        self.assertEqual(type(route).__name__, "RouteResult")
+        self.assertGreater(route.distance_m, 0)
+        self.assertGreater(route.duration_s, 0)
+        self.assertGreaterEqual(len(route.coordinates), 2)
+        self.assertEqual(route.cumulative_times_s[0], 0)
+        self.assertEqual(type(route.origin_snap).__name__, "SnapResult")
+        self.assertEqual(type(route.destination_snap).__name__, "SnapResult")
+
+        geojson = json.loads(route.to_geojson())
+        self.assertEqual(geojson["type"], "Feature")
+        self.assertEqual(geojson["geometry"]["type"], "LineString")
+        self.assertIn("origin_snap", geojson["properties"])
+
+    def test_isochrone_returns_structured_results(self):
+        isochrones = self.graph.isochrone((48.0, 11.0), [1, 3])
+
+        self.assertEqual([iso.minutes for iso in isochrones], [1.0, 3.0])
+        self.assertTrue(all(type(iso).__name__ == "IsochroneResult" for iso in isochrones))
+        geojson = json.loads(isochrones[0].to_geojson())
+        self.assertEqual(geojson["type"], "Polygon")
+
+    def test_snap_point_returns_structured_result(self):
+        snap = self.graph.snap_point(48.0, 11.0)
+
+        self.assertEqual(type(snap).__name__, "SnapResult")
+        self.assertEqual(snap.node_id, 1)
+        self.assertAlmostEqual(snap.distance_m, 0.0)
+        self.assertEqual(snap.as_dict()["node_id"], 1)
+
+    def test_graph_views_return_structured_route_and_isochrones(self):
+        reachable = self.graph.reachable((48.0, 11.0), minutes=5)
+        route = reachable.route((48.0, 11.0), (48.001, 11.0))
+        isochrone = reachable.isochrone((48.0, 11.0), [3])[0]
+
+        self.assertEqual(type(route).__name__, "RouteResult")
+        self.assertEqual(type(isochrone).__name__, "IsochroneResult")
+
+        prism = self.graph.prism((48.0, 11.0), (48.001, 11.0), max_minutes=8)
+        prism_route = prism.route((48.0, 11.0), (48.001, 11.0))
+        prism_iso = prism.isochrone((48.0, 11.0), [3])[0]
+
+        self.assertEqual(type(prism_route).__name__, "RouteResult")
+        self.assertEqual(type(prism_iso).__name__, "IsochroneResult")
+
+    def test_default_max_snap_rejects_far_coordinates(self):
+        with self.assertRaises(LookupError):
+            self.graph.route((47.999, 11.0), (48.001, 11.0))
+
+        route = self.graph.route((47.999, 11.0), (48.001, 11.0), max_snap_m=None)
+        self.assertEqual(type(route).__name__, "RouteResult")
+        self.assertGreater(route.origin_snap.distance_m, 100.0)
+
+    def test_invalid_osm_raises_value_error(self):
+        with self.assertRaises(ValueError):
+            gw.SpatialGraph.from_osm("not xml", "walk")
+
+    def test_no_path_raises_lookup_error(self):
+        xml = """
+        <osm>
+          <node id="1" lat="0" lon="0" />
+          <node id="2" lat="0" lon="0.001" />
+          <node id="3" lat="1" lon="1" />
+          <node id="4" lat="1" lon="1.001" />
+          <way id="10"><nd ref="1" /><nd ref="2" /><tag k="highway" v="residential" /></way>
+          <way id="20"><nd ref="3" /><nd ref="4" /><tag k="highway" v="residential" /></way>
+        </osm>
+        """
+        graph = gw.SpatialGraph.from_osm(xml, "walk", retain_all=True)
+
+        with self.assertRaises(LookupError):
+            graph.route((0, 0), (1, 1))
+
+
+if __name__ == "__main__":
+    unittest.main()

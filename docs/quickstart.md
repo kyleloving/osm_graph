@@ -20,32 +20,39 @@ print(graph)
 isos = graph.isochrone(origin, minutes=[5, 10, 15, 20])
 route = graph.route(origin, destination)
 pois = graph.fetch_pois(isos[-1])
+
+print(route.distance_m, route.duration_s)
+print(route.origin_snap.distance_m)
+print(pois.count)
 ```
 
 Use `SpatialGraph.from_pbf(path, network="walk")` for local offline OSM PBF workflows, or `SpatialGraph.from_osm(xml, network="walk")` when you already have OSM XML.
 
 ---
-## Working with GeoJSON output
+## Working with structured results
 
-All results come back as GeoJSON strings. Parse them with the standard library:
+Routes, snap diagnostics, and isochrones are structured Python objects. Export
+GeoJSON explicitly when you need to pass geometry to mapping tools:
 
 ```python
 import json
 
 # Isochrone geometry
-iso = json.loads(isos[0])
+iso = json.loads(isos[0].to_geojson())
 print(iso["type"])        # "Polygon"
 print(iso["coordinates"]) # [[lon, lat], ...]
 
-# Route feature
-route_data = json.loads(route)
+# Route metrics and feature export
+print(f"Distance: {route.distance_m:.0f} m")
+print(f"Duration: {route.duration_s:.0f} s")
+print(f"Waypoints: {len(route.cumulative_times_s)}")
+print(f"Origin snap: {route.origin_snap.distance_m:.1f} m")
+
+route_data = json.loads(route.to_geojson())
 props = route_data["properties"]
-print(f"Distance: {props['distance_m']:.0f} m")
-print(f"Duration: {props['duration_s']:.0f} s")
-print(f"Waypoints: {len(props['cumulative_times_s'])}")
 
 # POI FeatureCollection
-pois_data = json.loads(pois)
+pois_data = json.loads(pois.to_geojson())
 for feature in pois_data["features"]:
     tags = feature["properties"]
     name = tags.get("name", "unnamed")
@@ -68,27 +75,42 @@ for feature in pois_data["features"]:
 
 ---
 
-## Choosing a hull type
-
-| Value | Shape | Speed | Best for |
-|-------|-------|-------|----------|
-Isochrone polygons use triangulated travel-time contour extraction by default.
-
----
-
 ## Caching
 
-graphways uses a three-level cache so repeated queries skip the network entirely:
+graphways caches Overpass XML responses so repeated `from_place(...)` calls can
+skip the network:
 
 ```
-Overpass API (network) → disk XML → in-memory XML → in-memory graph
+Overpass API (network) -> disk XML -> in-memory XML
 ```
 
-Each level persists across process restarts (disk) or within a session (memory).
+Disk cache entries persist across process restarts. The in-memory XML cache only
+lasts for the current process. Built graphs are not hidden in a global cache;
+hold onto the returned `SpatialGraph` and reuse it directly.
 
 ```python
 print(gw.cache_dir())  # shows the disk cache location
-gw.clear_cache()       # wipe all three levels
+gw.clear_cache()       # wipe XML caches
 ```
 
-Set `OSM_GRAPH_CACHE_DIR` to override the default cache location.
+Set `GRAPHWAYS_CACHE_DIR` to override the default cache location.
+
+## Network services
+
+`SpatialGraph.from_place(...)`, `gw.geocode(...)`, and POI fetching use public
+OpenStreetMap services by default. Graphways sends a descriptive User-Agent,
+rate-limits Nominatim geocoding requests, and retries transient `429` / `5xx`
+responses.
+
+Set these environment variables when you need local mirrors, custom endpoints,
+or a project-specific contact string:
+
+```bash
+GRAPHWAYS_OVERPASS_URL=https://overpass-api.de/api/interpreter
+GRAPHWAYS_NOMINATIM_URL=https://nominatim.openstreetmap.org/search
+GRAPHWAYS_USER_AGENT="your-app/1.0 contact@example.com"
+```
+
+Use `SpatialGraph.from_pbf(...)` for offline workflows that should not touch
+network services.
+

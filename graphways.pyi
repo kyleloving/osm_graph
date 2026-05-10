@@ -1,13 +1,124 @@
 """
-Type stubs for graphways — the compiled Rust extension.
+Type stubs for graphways -- the compiled Rust extension.
 
-All GeoJSON return values are strings.  Parse them with ``json.loads``.
+Geometry results are structured Python objects. Use ``to_geojson()`` when you
+need serialized GeoJSON for Folium, GeoPandas, or web maps.
 """
 
 from __future__ import annotations
 
 # ---------------------------------------------------------------------------
-# Graph object
+# Result objects
+# ---------------------------------------------------------------------------
+
+class SnapResult:
+    """Nearest-network-node snap diagnostics for coordinate-based operations."""
+
+    @property
+    def input_lat(self) -> float: ...
+
+    @property
+    def input_lon(self) -> float: ...
+
+    @property
+    def node_id(self) -> int: ...
+
+    @property
+    def node_lat(self) -> float: ...
+
+    @property
+    def node_lon(self) -> float: ...
+
+    @property
+    def distance_m(self) -> float: ...
+
+    def as_dict(self) -> dict[str, float | int]: ...
+
+    def __repr__(self) -> str: ...
+
+class RouteResult:
+    """Fastest route result with metrics, snap diagnostics, and GeoJSON export."""
+
+    @property
+    def coordinates(self) -> list[tuple[float, float]]: ...
+
+    @property
+    def cumulative_times_s(self) -> list[float]: ...
+
+    @property
+    def distance_m(self) -> float: ...
+
+    @property
+    def duration_s(self) -> float: ...
+
+    @property
+    def origin_snap(self) -> SnapResult: ...
+
+    @property
+    def destination_snap(self) -> SnapResult: ...
+
+    def as_dict(self) -> dict[str, object]: ...
+
+    def to_geojson(self) -> str:
+        """Return this route as a GeoJSON ``Feature`` string."""
+        ...
+
+    def __repr__(self) -> str: ...
+
+class IsochroneResult:
+    """One isochrone polygon for one travel-time threshold."""
+
+    @property
+    def minutes(self) -> float: ...
+
+    def as_dict(self) -> dict[str, object]: ...
+
+    def to_geojson(self) -> str:
+        """Return this isochrone polygon as a GeoJSON geometry string."""
+        ...
+
+    def __repr__(self) -> str: ...
+
+class Poi:
+    """OpenStreetMap point of interest returned by ``SpatialGraph.fetch_pois``."""
+
+    @property
+    def id(self) -> int: ...
+
+    @property
+    def lat(self) -> float: ...
+
+    @property
+    def lon(self) -> float: ...
+
+    @property
+    def tags(self) -> dict[str, str]: ...
+
+    def as_dict(self) -> dict[str, object]: ...
+
+    def __repr__(self) -> str: ...
+
+class PoiCollection:
+    """Collection of POIs with structured access and GeoJSON export."""
+
+    @property
+    def count(self) -> int: ...
+
+    @property
+    def pois(self) -> list[Poi]: ...
+
+    def as_dict(self) -> dict[str, object]: ...
+
+    def to_geojson(self) -> str:
+        """Return POIs as a GeoJSON ``FeatureCollection`` string."""
+        ...
+
+    def __len__(self) -> int: ...
+
+    def __repr__(self) -> str: ...
+
+# ---------------------------------------------------------------------------
+# Graph views
 # ---------------------------------------------------------------------------
 
 class ReachableGraph:
@@ -62,7 +173,8 @@ class ReachableGraph:
         self,
         origin: tuple[float, float],
         minutes: list[float],
-    ) -> list[str]:
+        max_snap_m: float | None = 100.0,
+    ) -> list[IsochroneResult]:
         """
         Compute isochrones within this reachable subgraph.
         """
@@ -72,7 +184,8 @@ class ReachableGraph:
         self,
         origin: tuple[float, float],
         destination: tuple[float, float],
-    ) -> str:
+        max_snap_m: float | None = 100.0,
+    ) -> RouteResult:
         """
         Find the fastest route constrained to this reachable subgraph.
         """
@@ -156,7 +269,8 @@ class PrismGraph:
         self,
         origin: tuple[float, float],
         minutes: list[float],
-    ) -> list[str]:
+        max_snap_m: float | None = 100.0,
+    ) -> list[IsochroneResult]:
         """
         Compute isochrones constrained to this prism subgraph.
         """
@@ -166,7 +280,8 @@ class PrismGraph:
         self,
         origin: tuple[float, float],
         destination: tuple[float, float],
-    ) -> str:
+        max_snap_m: float | None = 100.0,
+    ) -> RouteResult:
         """
         Find the fastest route constrained to this prism subgraph.
         """
@@ -179,7 +294,7 @@ class SpatialGraph:
     A road-network graph loaded from OpenStreetMap.
 
     Construct once with :meth:`from_place`, :meth:`from_pbf`, or :meth:`from_osm`.
-    Reuse across multiple queries to avoid redundant cache lookups.
+    Reuse the same object across multiple queries to avoid rebuilding the graph.
 
     Attributes are read-only; all mutations happen inside Rust.
     """
@@ -241,7 +356,7 @@ class SpatialGraph:
         """
         Return ``(osm_id, lat, lon)`` for the node nearest to ``(lat, lon)``.
 
-        Uses the internal R-tree spatial index — O(log n).
+        Uses the internal R-tree spatial index -- O(log n).
         Returns ``None`` if the graph is empty.
         """
         ...
@@ -250,7 +365,8 @@ class SpatialGraph:
         self,
         origin: tuple[float, float],
         minutes: list[float],
-    ) -> list[str]:
+        max_snap_m: float | None = 100.0,
+    ) -> list[IsochroneResult]:
         """
         Compute isochrones from ``(lat, lon)`` using this graph.
 
@@ -262,9 +378,10 @@ class SpatialGraph:
             Travel-time thresholds in minutes.
         Returns
         -------
-        list[str]
-            One GeoJSON geometry string per time limit, in the same order
-            as ``time_limits``.
+        list[IsochroneResult]
+            One polygon result per time limit, in the same order as
+            ``minutes``. Call ``to_geojson()`` when you need serialized
+            GeoJSON.
         """
         ...
 
@@ -272,7 +389,8 @@ class SpatialGraph:
         self,
         origin: tuple[float, float],
         destination: tuple[float, float],
-    ) -> str:
+        max_snap_m: float | None = 100.0,
+    ) -> RouteResult:
         """
         Find the fastest route between two coordinates using A*.
 
@@ -280,42 +398,45 @@ class SpatialGraph:
 
         Returns
         -------
-        str
-            GeoJSON ``Feature`` (LineString) with properties:
+        RouteResult
+            Structured result with ``distance_m``, ``duration_s``,
+            ``coordinates``, ``cumulative_times_s``, and snap diagnostics.
 
-            - ``distance_m`` (float) — total route distance in metres
-            - ``duration_s`` (float) — total travel time in seconds
-            - ``cumulative_times_s`` (list[float]) — elapsed time at each waypoint
         """
         ...
 
-    def fetch_pois(self, isochrone_geojson: str) -> str:
+    def fetch_pois(self, isochrone: IsochroneResult | str) -> PoiCollection:
         """
         Fetch OSM points of interest within a given isochrone polygon.
 
         Parameters
         ----------
-        isochrone_geojson:
-            A GeoJSON geometry string, e.g. from :meth:`isochrone`.
+        isochrone:
+            An ``IsochroneResult`` from :meth:`isochrone`, or a GeoJSON
+            geometry string.
 
         Returns
         -------
         str
-            GeoJSON ``FeatureCollection``; each feature is a POI ``Point``
-            with raw OSM tags as properties.
+            Structured POI collection. Call ``to_geojson()`` for a GeoJSON
+            ``FeatureCollection``.
         """
         ...
 
-    def snap_point(self, lat: float, lon: float) -> dict[str, float | int] | None:
+    def snap_point(self, lat: float, lon: float) -> SnapResult | None:
         """
         Return snap diagnostics for the nearest graph node to ``(lat, lon)``.
 
-        Keys: ``input_lat``, ``input_lon``, ``node_id``, ``node_lat``,
-        ``node_lon``, and ``distance_m``.
+        Use ``as_dict()`` if you need a plain dictionary.
         """
         ...
 
-    def reachable(self, origin: tuple[float, float], minutes: float) -> ReachableGraph:
+    def reachable(
+        self,
+        origin: tuple[float, float],
+        minutes: float,
+        max_snap_m: float | None = 100.0,
+    ) -> ReachableGraph:
         """
         Compute one-sided reachability from ``(lat, lon)`` within ``minutes``.
         """
@@ -328,6 +449,7 @@ class SpatialGraph:
         max_minutes: float,
         stop_minutes: float = 0.0,
         buffer_minutes: float = 0.0,
+        max_snap_m: float | None = 100.0,
     ) -> PrismGraph:
         """
         Return the network-time prism for nodes that fit within:
@@ -375,33 +497,17 @@ def geocode(place: str) -> tuple[float, float]:
     """
     ...
 
-def fetch_pois(isochrone_geojson: str) -> str:
-    """
-    Fetch OSM points of interest that fall within a given isochrone polygon.
-
-    Parameters
-    ----------
-    isochrone_geojson:
-        A GeoJSON geometry string, e.g. from :meth:`SpatialGraph.isochrone`.
-
-    Returns
-    -------
-    str
-        GeoJSON ``FeatureCollection``; each feature is a POI ``Point`` with
-        raw OSM tags as properties.
-    """
-    ...
-
 def cache_dir() -> str:
     """
     Return the path to the on-disk XML cache directory.
 
-    Override the default by setting the ``OSM_GRAPH_CACHE_DIR`` environment variable.
+    Override the default by setting the ``GRAPHWAYS_CACHE_DIR`` environment variable.
     """
     ...
 
 def clear_cache() -> None:
     """
-    Clear both the in-memory (graph and XML) caches and the on-disk XML cache.
+    Clear both the in-memory and on-disk XML caches.
     """
     ...
+

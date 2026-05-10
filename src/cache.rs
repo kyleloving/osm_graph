@@ -1,34 +1,14 @@
 use crate::error::OsmGraphError;
-use crate::graph::SpatialGraph;
 use lazy_static::lazy_static;
 use lru::LruCache;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
-type GraphCache = Mutex<LruCache<String, SpatialGraph>>;
 type XmlCache = Mutex<LruCache<String, String>>;
 
 lazy_static! {
-    static ref GRAPH_CACHE: GraphCache =
-        Mutex::new(LruCache::new(std::num::NonZeroUsize::new(100).unwrap()));
     static ref XML_CACHE: XmlCache =
         Mutex::new(LruCache::new(std::num::NonZeroUsize::new(20).unwrap()));
-}
-
-pub fn check_cache(key: &str) -> Result<Option<SpatialGraph>, OsmGraphError> {
-    Ok(GRAPH_CACHE
-        .lock()
-        .map_err(|_| OsmGraphError::LockPoisoned)?
-        .get(key)
-        .cloned())
-}
-
-pub fn insert_into_cache(key: String, sg: SpatialGraph) -> Result<(), OsmGraphError> {
-    GRAPH_CACHE
-        .lock()
-        .map_err(|_| OsmGraphError::LockPoisoned)?
-        .put(key, sg);
-    Ok(())
 }
 
 pub fn check_xml_cache(query: &str) -> Result<Option<String>, OsmGraphError> {
@@ -49,10 +29,6 @@ pub fn insert_into_xml_cache(query: String, xml: String) -> Result<(), OsmGraphE
 
 #[cfg(feature = "extension-module")]
 pub fn clear_cache() -> Result<(), OsmGraphError> {
-    GRAPH_CACHE
-        .lock()
-        .map_err(|_| OsmGraphError::LockPoisoned)?
-        .clear();
     XML_CACHE
         .lock()
         .map_err(|_| OsmGraphError::LockPoisoned)?
@@ -72,12 +48,13 @@ fn fnv1a(s: &str) -> u64 {
     hash
 }
 
-/// Returns the disk cache directory, overridable via `OSM_GRAPH_CACHE_DIR`.
+/// Returns the disk cache directory, overridable via `GRAPHWAYS_CACHE_DIR`.
 /// Defaults to a `cache/` folder in the current working directory — the same
 /// convention used by OSMnx, so researchers get persistent, visible caching
 /// next to their notebooks and scripts.
 pub fn disk_cache_dir() -> PathBuf {
-    std::env::var_os("OSM_GRAPH_CACHE_DIR")
+    std::env::var_os("GRAPHWAYS_CACHE_DIR")
+        .or_else(|| std::env::var_os("OSM_GRAPH_CACHE_DIR"))
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("cache"))
 }
@@ -142,7 +119,7 @@ mod tests {
                 .unwrap()
                 .subsec_nanos()
         ));
-        std::env::set_var("OSM_GRAPH_CACHE_DIR", &dir);
+        std::env::set_var("GRAPHWAYS_CACHE_DIR", &dir);
 
         write_disk_xml_cache("test_query", "<xml>hello</xml>");
         let result = check_disk_xml_cache("test_query");
@@ -151,7 +128,7 @@ mod tests {
         assert!(check_disk_xml_cache("other_query").is_none());
 
         let _ = std::fs::remove_dir_all(&dir);
-        std::env::remove_var("OSM_GRAPH_CACHE_DIR");
+        std::env::remove_var("GRAPHWAYS_CACHE_DIR");
     }
 
     #[test]
@@ -165,13 +142,13 @@ mod tests {
                 .subsec_nanos()
         ));
         std::fs::create_dir_all(&dir).unwrap();
-        std::env::set_var("OSM_GRAPH_CACHE_DIR", &dir);
+        std::env::set_var("GRAPHWAYS_CACHE_DIR", &dir);
 
         let result = clear_disk_cache();
         assert!(matches!(result, Err(OsmGraphError::InvalidInput(_))));
         assert!(dir.exists());
 
         let _ = std::fs::remove_dir_all(&dir);
-        std::env::remove_var("OSM_GRAPH_CACHE_DIR");
+        std::env::remove_var("GRAPHWAYS_CACHE_DIR");
     }
 }

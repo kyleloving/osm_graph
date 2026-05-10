@@ -26,12 +26,12 @@ exclude = [
     "/pyproject.toml",
     "/pysochrone.py",
 ]
-description = "Fast OpenStreetMap reachability, routing, and isochrones from Python, powered by Rust — no routing server required."
+description = "Fast OpenStreetMap reachability, routing, and isochrones from Python, powered by Rust -- no routing server required."
 
 [lib]
 name = "graphways"
-# cdylib  — Python extension module (.so / .pyd)
-# rlib    — normal Rust library; lets other Rust crates depend on this package
+# cdylib  -- Python extension module (.so / .pyd)
+# rlib    -- normal Rust library; lets other Rust crates depend on this package
 crate-type = ["cdylib", "rlib"]
 
 [features]

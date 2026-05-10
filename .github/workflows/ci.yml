@@ -44,3 +44,8 @@ jobs:
 
       - name: Build wheel
         run: maturin build --release --features extension-module
+
+      - name: Python API smoke tests
+        run: |
+          pip install --force-reinstall --no-deps target/wheels/*.whl
+          python -m unittest discover -s tests -p "test_*.py"

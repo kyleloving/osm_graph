@@ -1,6 +1,6 @@
 # graphways
 
-**Fast isochrones, routing, and POI lookups from OpenStreetMap — written in Rust, callable from Python.**
+**Fast isochrones, routing, and POI lookups from OpenStreetMap -- written in Rust, callable from Python.**
 
 [![PyPI](https://img.shields.io/pypi/v/graphways)](https://pypi.org/project/graphways/)
 [![Crates.io](https://img.shields.io/crates/v/graphways)](https://crates.io/crates/graphways)
@@ -12,12 +12,13 @@
 
 graphways queries OpenStreetMap, builds a road-network graph, and gives you:
 
-- **Isochrones** — polygons bounding everything reachable within a time limit
-- **Point-to-point routing** — A\* routes with per-waypoint cumulative travel times
-- **POI fetching** — amenities, shops, and other features within any isochrone
-- **Graph introspection** — inspect nodes, edges, and the network structure directly
+- **Isochrones** -- polygons bounding everything reachable within a time limit
+- **Point-to-point routing** -- A* routes with per-waypoint cumulative travel times
+- **POI fetching** -- amenities, shops, and other features within any isochrone
+- **Graph introspection** -- inspect nodes, edges, and the network structure directly
 
-All GeoJSON output. All cached. Typically 5–6× faster than osmnx for repeated queries.
+Routes, isochrones, snap diagnostics, and POIs return structured Python objects.
+Call `.to_geojson()` when you need serialized GeoJSON for maps or files.
 
 ---
 
@@ -26,46 +27,50 @@ All GeoJSON output. All cached. Typically 5–6× faster than osmnx for repeated
 ```python
 import graphways as gw
 
-# Build the graph once; subsequent queries reuse the same in-memory network
-graph = gw.SpatialGraph.from_place("Marienplatz, Munich, Germany", network="drive", max_dist=10_000)
+# Build the graph once; reuse this object for repeated local queries.
+graph = gw.SpatialGraph.from_place(
+    "Marienplatz, Munich, Germany",
+    network="drive",
+    max_dist=10_000,
+)
 
-# Isochrones from the same point
 isos = graph.isochrone((48.137144, 11.575399), minutes=[5, 10, 15, 20])
 
-# Route to somewhere else
 route = graph.route((48.137144, 11.575399), (48.154560, 11.530840))
+print(route.distance_m, route.duration_s)
 
-# What's reachable?
 pois = graph.fetch_pois(isos[0])
+print(pois.count)
 ```
 
 ---
+
 ## Features at a glance
 
 | Feature | Detail |
 |---------|--------|
-| Graph construction | Parses OSM XML into a petgraph `DiGraph` |
-| Simplification | Collapses linear chains, deduplicates parallel edges — ~89% node/edge reduction |
+| Graph construction | Parses OSM XML or local OSM PBF into a reusable `SpatialGraph` |
+| Simplification | Collapses linear chains, deduplicates parallel edges, and preserves edge geometry |
 | Spatial index | R-tree for O(log n) nearest-node lookups |
-| Isochrones | Single Dijkstra pass; hull computation parallelised across time limits |
-| Routing | A\* with admissible straight-line heuristic |
-| Isochrone geometry | Triangulated travel-time contours |
-| Network types | Drive · DriveService · Walk · Bike · All · AllPrivate |
-| Caching | 3-level: disk XML → in-memory XML → in-memory graph |
-| Python bindings | Full PyO3 bindings with type stubs |
+| Isochrones | Bounded graph search plus triangulated travel-time contours |
+| Routing | A* with an admissible straight-line heuristic |
+| Network types | Drive, DriveService, Walk, Bike, All, AllPrivate |
+| Caching | Overpass XML cache: disk XML -> in-memory XML |
+| Python bindings | Structured result objects with explicit GeoJSON export |
 
 ---
 
 ## Performance
 
-Benchmarks on the Munich road network (cached, no network I/O), Intel Core i7-11370H.
-Single Dijkstra pass compared against osmnx with a pre-enriched graph.
+Graphways is designed for repeated local queries over a reusable `SpatialGraph`.
+The benchmark suite reports graph construction separately from steady-state
+route, reachability, and isochrone queries:
 
-| Radius | Nodes | Edges | graphways | osmnx | Speedup |
-|-------:|------:|------:|-----------:|------:|--------:|
-| 5 000 m | 6 251 | 15 356 | 0.030 s | 0.190 s | **6.3×** |
-| 10 000 m | 16 183 | 41 601 | 0.064 s | 0.365 s | **5.7×** |
-| 20 000 m | 32 501 | 82 385 | 0.092 s | 0.455 s | **4.9×** |
+```bash
+python benchmarks/comparison.py
+python benchmarks/engines/engines.py --pbf C:\path\to\extract.osm.pbf
+```
 
-The gap reflects compiled Rust and petgraph's flat adjacency list vs pure-Python NetworkX.
-graphways's cache means graph construction is a one-time cost; the table shows steady-state performance for repeated queries over the same region.
+Treat benchmark numbers as workload-specific. They depend on graph size,
+network profile, machine, cache state, and whether comparisons include
+server-based routing engines such as OSRM or Valhalla.

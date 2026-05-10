@@ -1,4 +1,13 @@
 // Define an enum for network types
+use reqwest::header::{HeaderMap, RETRY_AFTER};
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
+use tokio::time::sleep;
+
+const DEFAULT_OVERPASS_URL: &str = "https://overpass-api.de/api/interpreter";
+const DEFAULT_NOMINATIM_URL: &str = "https://nominatim.openstreetmap.org/search";
+const MAX_RETRIES: usize = 2;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum NetworkType {
     Drive,
@@ -61,21 +70,105 @@ pub fn create_overpass_query(polygon_coord_str: &str, network_type: NetworkType)
 // Reuse a single reqwest::Client across all HTTP calls in the library
 lazy_static::lazy_static! {
     pub(crate) static ref CLIENT: reqwest::Client = reqwest::Client::builder()
-        .user_agent("graphways/0.2 (https://github.com/kyleloving/graphways)")
+        .user_agent(user_agent())
         .build()
         .expect("failed to build HTTP client");
+    static ref OVERPASS_LAST_REQUEST: Mutex<Option<Instant>> = Mutex::new(None);
+    static ref NOMINATIM_LAST_REQUEST: Mutex<Option<Instant>> = Mutex::new(None);
+}
+
+pub(crate) fn user_agent() -> String {
+    std::env::var("GRAPHWAYS_USER_AGENT").unwrap_or_else(|_| {
+        format!(
+            "graphways/{} (https://github.com/kyleloving/graphways)",
+            env!("CARGO_PKG_VERSION")
+        )
+    })
+}
+
+pub fn overpass_url() -> String {
+    std::env::var("GRAPHWAYS_OVERPASS_URL").unwrap_or_else(|_| DEFAULT_OVERPASS_URL.to_string())
+}
+
+pub fn nominatim_url() -> String {
+    std::env::var("GRAPHWAYS_NOMINATIM_URL").unwrap_or_else(|_| DEFAULT_NOMINATIM_URL.to_string())
+}
+
+async fn wait_for_slot(last_request: &Mutex<Option<Instant>>, min_interval: Duration) {
+    let delay = {
+        let mut last = match last_request.lock() {
+            Ok(last) => last,
+            Err(_) => return,
+        };
+        let now = Instant::now();
+        let delay = last
+            .and_then(|previous| previous.checked_add(min_interval))
+            .and_then(|next_allowed| next_allowed.checked_duration_since(now))
+            .unwrap_or_default();
+        *last = Some(now + delay);
+        delay
+    };
+
+    if !delay.is_zero() {
+        sleep(delay).await;
+    }
+}
+
+fn retry_after(headers: &HeaderMap) -> Option<Duration> {
+    headers
+        .get(RETRY_AFTER)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.parse::<u64>().ok())
+        .map(Duration::from_secs)
+}
+
+pub(crate) fn is_retryable_status(status: reqwest::StatusCode) -> bool {
+    status == reqwest::StatusCode::TOO_MANY_REQUESTS
+        || status == reqwest::StatusCode::BAD_GATEWAY
+        || status == reqwest::StatusCode::SERVICE_UNAVAILABLE
+        || status == reqwest::StatusCode::GATEWAY_TIMEOUT
+}
+
+pub(crate) async fn retry_delay(headers: &HeaderMap, attempt: usize) {
+    let fallback = Duration::from_millis(500 * (attempt as u64 + 1));
+    sleep(retry_after(headers).unwrap_or(fallback)).await;
+}
+
+pub(crate) async fn wait_for_nominatim_slot() {
+    wait_for_slot(&NOMINATIM_LAST_REQUEST, Duration::from_secs(1)).await;
+}
+
+async fn wait_for_overpass_slot() {
+    wait_for_slot(&OVERPASS_LAST_REQUEST, Duration::from_millis(250)).await;
 }
 
 // Function to make request to Overpass API
 pub async fn make_request(url: &str, query: &str) -> Result<String, reqwest::Error> {
-    let response = CLIENT.post(url).form(&[("data", query)]).send().await?;
+    for attempt in 0..=MAX_RETRIES {
+        wait_for_overpass_slot().await;
+        let response = CLIENT
+            .post(url)
+            .header("User-Agent", user_agent())
+            .form(&[("data", query)])
+            .send()
+            .await?;
 
-    if response.status().is_success() {
-        let response_text = response.text().await?;
-        Ok(response_text)
-    } else {
-        Err(response.error_for_status().unwrap_err())
+        if response.status().is_success() {
+            return response.text().await;
+        }
+
+        let status = response.status();
+        let headers = response.headers().clone();
+        let error = response.error_for_status().unwrap_err();
+        if attempt < MAX_RETRIES && is_retryable_status(status) {
+            retry_delay(&headers, attempt).await;
+            continue;
+        }
+
+        return Err(error);
     }
+
+    unreachable!("retry loop always returns before completion")
 }
 
 /// Construct a `south,west,north,east` bounding box string from a point and radius.
@@ -100,6 +193,9 @@ pub fn bbox_from_point(lat: f64, lon: f64, dist: f64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn test_bbox_is_symmetric() {
@@ -117,5 +213,38 @@ mod tests {
         let small_parts: Vec<f64> = small.split(',').map(|s| s.parse().unwrap()).collect();
         let large_parts: Vec<f64> = large.split(',').map(|s| s.parse().unwrap()).collect();
         assert!(large_parts[2] > small_parts[2]);
+    }
+
+    #[test]
+    fn service_urls_can_be_overridden_by_environment() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        std::env::set_var("GRAPHWAYS_OVERPASS_URL", "https://example.com/overpass");
+        std::env::set_var("GRAPHWAYS_NOMINATIM_URL", "https://example.com/search");
+
+        assert_eq!(overpass_url(), "https://example.com/overpass");
+        assert_eq!(nominatim_url(), "https://example.com/search");
+
+        std::env::remove_var("GRAPHWAYS_OVERPASS_URL");
+        std::env::remove_var("GRAPHWAYS_NOMINATIM_URL");
+    }
+
+    #[test]
+    fn user_agent_defaults_to_current_package_version() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        std::env::remove_var("GRAPHWAYS_USER_AGENT");
+
+        let ua = user_agent();
+        assert!(ua.contains(env!("CARGO_PKG_VERSION")));
+        assert!(ua.contains("graphways"));
+    }
+
+    #[test]
+    fn user_agent_can_be_overridden_by_environment() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        std::env::set_var("GRAPHWAYS_USER_AGENT", "my-app/1.0 contact@example.com");
+
+        assert_eq!(user_agent(), "my-app/1.0 contact@example.com");
+
+        std::env::remove_var("GRAPHWAYS_USER_AGENT");
     }
 }

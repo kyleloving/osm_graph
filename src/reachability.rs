@@ -5,13 +5,9 @@
 //! downstream filtering (POIs, candidates, two-sided feasibility) consume this
 //! same result, so a single search powers all of them.
 //!
-//! The current implementation runs petgraph's unbounded Dijkstra and post-filters
-//! at `max_cost`. A bounded Dijkstra can later be substituted behind this same
-//! signature without callers changing.
+use std::cmp::Ordering;
+use std::collections::{BinaryHeap, HashMap};
 
-use std::collections::HashMap;
-
-use petgraph::algo::dijkstra;
 use petgraph::graph::{DiGraph, EdgeIndex, NodeIndex};
 use petgraph::visit::EdgeRef;
 
@@ -57,6 +53,35 @@ pub struct EdgeInfo<'a> {
     pub weight: &'a XmlWay,
 }
 
+#[derive(Clone, Copy, Debug)]
+struct SearchState {
+    cost: f64,
+    node: NodeIndex,
+}
+
+impl PartialEq for SearchState {
+    fn eq(&self, other: &Self) -> bool {
+        self.cost == other.cost && self.node == other.node
+    }
+}
+
+impl Eq for SearchState {}
+
+impl PartialOrd for SearchState {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for SearchState {
+    fn cmp(&self, other: &Self) -> Ordering {
+        other
+            .cost
+            .partial_cmp(&self.cost)
+            .unwrap_or(Ordering::Equal)
+    }
+}
+
 /// Compute reachability with a caller-supplied edge cost.
 ///
 /// The closure is called once per edge relaxation. Use it to inject
@@ -72,17 +97,58 @@ pub fn compute_reachability_with<F>(
 where
     F: FnMut(EdgeInfo<'_>) -> f64,
 {
-    let raw = dijkstra(graph, start, None, |e| {
-        cost(EdgeInfo {
-            id: e.id(),
-            source: e.source(),
-            target: e.target(),
-            weight: e.weight(),
-        })
+    if max_cost.is_nan() || max_cost < 0.0 {
+        return ReachabilityResult {
+            start,
+            max_cost,
+            distances: HashMap::new(),
+        };
+    }
+
+    let mut distances = HashMap::new();
+    let mut heap = BinaryHeap::new();
+    distances.insert(start, 0.0);
+    heap.push(SearchState {
+        cost: 0.0,
+        node: start,
     });
 
-    let distances: HashMap<NodeIndex, f64> =
-        raw.into_iter().filter(|&(_, t)| t <= max_cost).collect();
+    while let Some(SearchState {
+        cost: node_cost,
+        node,
+    }) = heap.pop()
+    {
+        if node_cost > max_cost {
+            break;
+        }
+        if node_cost > *distances.get(&node).unwrap_or(&f64::INFINITY) {
+            continue;
+        }
+
+        for edge in graph.edges(node) {
+            let edge_cost = cost(EdgeInfo {
+                id: edge.id(),
+                source: edge.source(),
+                target: edge.target(),
+                weight: edge.weight(),
+            });
+            if !edge_cost.is_finite() || edge_cost < 0.0 {
+                continue;
+            }
+            let next = edge.target();
+            let next_cost = node_cost + edge_cost;
+            if next_cost > max_cost {
+                continue;
+            }
+            if next_cost < *distances.get(&next).unwrap_or(&f64::INFINITY) {
+                distances.insert(next, next_cost);
+                heap.push(SearchState {
+                    cost: next_cost,
+                    node: next,
+                });
+            }
+        }
+    }
 
     ReachabilityResult {
         start,
@@ -170,6 +236,7 @@ impl ReachableGraph {
         origin_lon: f64,
         dest_lat: f64,
         dest_lon: f64,
+        max_snap_m: Option<f64>,
     ) -> Result<crate::routing::Route, crate::error::OsmGraphError> {
         self.materialize().route(
             origin_lat,
@@ -177,6 +244,7 @@ impl ReachableGraph {
             dest_lat,
             dest_lon,
             self.network_type,
+            max_snap_m,
         )
     }
 
@@ -185,27 +253,14 @@ impl ReachableGraph {
         lat: f64,
         lon: f64,
         time_limits: Vec<f64>,
+        max_snap_m: Option<f64>,
     ) -> Option<Vec<geo::Polygon>> {
         self.materialize()
-            .isochrones(lat, lon, time_limits, self.network_type)
+            .isochrones(lat, lon, time_limits, self.network_type, max_snap_m)
     }
 }
 
 impl SpatialGraph {
-    /// Alias for [`SpatialGraph::reachability`] using the public API naming.
-    ///
-    /// This returns the one-sided reachability field from the nearest graph
-    /// node to `(lat, lon)` within `max_time` seconds.
-    pub fn reachable_from(
-        &self,
-        lat: f64,
-        lon: f64,
-        max_time: f64,
-        network_type: NetworkType,
-    ) -> Option<ReachabilityResult> {
-        self.reachability(lat, lon, max_time, network_type)
-    }
-
     /// Return the graph-shaped reachability result: a lightweight view over
     /// nodes reachable from `(lat, lon)` within `max_time`, plus travel-time
     /// labels from the origin.
@@ -215,8 +270,9 @@ impl SpatialGraph {
         lon: f64,
         max_time: f64,
         network_type: NetworkType,
+        max_snap_m: Option<f64>,
     ) -> Option<ReachableGraph> {
-        let result = self.reachability(lat, lon, max_time, network_type)?;
+        let result = self.reachability(lat, lon, max_time, network_type, max_snap_m)?;
         Some(ReachableGraph {
             graph: self.clone(),
             result,
@@ -236,8 +292,9 @@ impl SpatialGraph {
         lon: f64,
         max_time: f64,
         network_type: NetworkType,
+        max_snap_m: Option<f64>,
     ) -> Option<ReachabilityResult> {
-        let start = self.nearest_node(lat, lon)?;
+        let start = self.nearest_node_within(lat, lon, max_snap_m)?;
         Some(compute_reachability(
             &self.graph,
             start,
@@ -260,7 +317,7 @@ impl SpatialGraph {
         max_time: f64,
         network_type: NetworkType,
     ) -> Option<Result<Vec<crate::poi::ReachablePoi>, crate::error::OsmGraphError>> {
-        let result = self.reachability(lat, lon, max_time, network_type)?;
+        let result = self.reachability(lat, lon, max_time, network_type, None)?;
         Some(crate::poi::fetch_pois_within_reachability(self, &result).await)
     }
 }
@@ -299,6 +356,7 @@ mod tests {
             walk_travel_time: 0.0,
             bike_travel_time: 0.0,
             drive_travel_time: 0.0,
+            geometry: Vec::new(),
         }
     }
 
@@ -348,6 +406,38 @@ mod tests {
     }
 
     #[test]
+    fn bounded_search_does_not_insert_nodes_beyond_budget() {
+        let nodes = vec![
+            node(1, 0.0, 0.0),
+            node(2, 0.0, 0.001),
+            node(3, 0.0, 0.002),
+            node(4, 0.0, 0.003),
+        ];
+        let w = way(vec![1, 2, 3, 4], vec![("highway", "residential")]);
+        let g = create_graph(nodes, vec![w], true, false);
+
+        let start = g.node_indices().find(|&i| g[i].id == 1).unwrap();
+        let result = compute_reachability_with(&g, start, 15.0, |_| 10.0);
+
+        let mut node_ids: Vec<i64> = result.distances.keys().map(|&idx| g[idx].id).collect();
+        node_ids.sort_unstable();
+        assert_eq!(node_ids, vec![1, 2]);
+        assert!(result.distances.values().all(|&t| t <= 15.0));
+    }
+
+    #[test]
+    fn invalid_budget_returns_empty_reachability() {
+        let nodes = vec![node(1, 0.0, 0.0), node(2, 0.0, 0.001)];
+        let w = way(vec![1, 2], vec![("highway", "residential")]);
+        let g = create_graph(nodes, vec![w], true, false);
+
+        let start = g.node_indices().find(|&i| g[i].id == 1).unwrap();
+        let result = compute_reachability(&g, start, f64::NAN, NetworkType::Drive);
+
+        assert!(result.distances.is_empty());
+    }
+
+    #[test]
     fn closure_can_double_baseline_cost() {
         // Verify the closure has access to the way and produces 2x the baseline.
         let nodes = vec![node(1, 0.0, 0.0), node(2, 0.0, 0.001), node(3, 0.0, 0.002)];
@@ -377,7 +467,7 @@ mod tests {
         let graph = SpatialGraph::new(create_graph(nodes, vec![w], true, false));
 
         let reachable = graph
-            .reachable_graph(0.0, 0.0, 20.0, NetworkType::Drive)
+            .reachable_graph(0.0, 0.0, 20.0, NetworkType::Drive, None)
             .unwrap();
 
         assert_eq!(reachable.node_count(), 2);

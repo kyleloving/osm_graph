@@ -1,14 +1,13 @@
 # Benchmarks
 
-This directory keeps external comparison artifacts. The primary Rust benchmark
-harness lives in `examples/benchmark.rs` so it can run with Cargo without adding
-extra benchmark dependencies.
+This directory keeps benchmark and external comparison artifacts.
 
 ## Local PBF Pipeline
 
-```powershell
-cargo run --release --example benchmark -- data/district-of-columbia-latest.osm.pbf
-```
+`benchmark.rs` is a Rust harness for profiling the local PBF pipeline. It
+measures one-shot setup costs separately from steady-state hot-path timings.
+It is kept in `benchmarks/` as a repo-local profiling tool rather than as part
+of the published Rust crate.
 
 Useful environment variables:
 
@@ -21,9 +20,6 @@ Useful environment variables:
 - `RETAIN_ALL=1`
 - `PROFILE_LOOP=1`
 
-The harness reports setup timings separately from steady-state hot-path timings
-so graph loading improvements and query-time improvements are easy to compare.
-
 ## External Comparison
 
 ```powershell
@@ -35,7 +31,7 @@ python benchmarks/comparison.py --pbf C:\path\to\extract.osm.pbf
 This runs three sections:
 
 - a steady-state graphways vs NetworkX comparison on pre-warmed OSM graphs
-- a graphways-only split between cached graph lookup and repeated query cost
+- a graphways-only split between cached XML graph construction and repeated query cost
 - an optional r5py comparison when `--pbf` is supplied and r5py is installed
 
 The chart uses the headline comparison and updates `benchmarks/performance.png`

@@ -1,6 +1,7 @@
-use crate::cache;
+#[cfg(feature = "extension-module")]
 use crate::error::OsmGraphError;
 use crate::graph::{self, SpatialGraph};
+#[cfg(feature = "extension-module")]
 use crate::overpass;
 use crate::overpass::NetworkType;
 use crate::reachability::{compute_reachability, ReachabilityResult};
@@ -12,16 +13,6 @@ use std::sync::Arc;
 
 const SATURATED_REUSE_RATIO: f64 = 0.99;
 const CONTOUR_KEY_SCALE: f64 = 10.0;
-
-pub fn calculate_isochrones(
-    graph: &DiGraph<graph::XmlNode, graph::XmlWay>,
-    start_node: NodeIndex,
-    time_limits: Vec<f64>,
-) -> Vec<Polygon> {
-    let max_cost = time_limits.iter().cloned().fold(0.0_f64, f64::max);
-    let result = compute_reachability(graph, start_node, max_cost, NetworkType::Drive);
-    build_isochrone_polygons(graph, &result, &time_limits)
-}
 
 /// Build one isochrone polygon per requested time limit from a precomputed
 /// `ReachabilityResult`. Polygons are built in parallel (one scoped thread per
@@ -422,6 +413,7 @@ mod tests {
             walk_travel_time: seconds,
             bike_travel_time: seconds,
             drive_travel_time: seconds,
+            geometry: Vec::new(),
         }
     }
 
@@ -503,7 +495,7 @@ pub fn calculate_isochrones_concurrently(
     graph: std::sync::Arc<DiGraph<graph::XmlNode, graph::XmlWay>>,
     start_node: NodeIndex,
     time_limits: Vec<f64>,
-    network_type: overpass::NetworkType,
+    network_type: NetworkType,
 ) -> Vec<Polygon> {
     let max_cost = time_limits.iter().cloned().fold(0.0_f64, f64::max);
     let result = compute_reachability(&graph, start_node, max_cost, network_type);
@@ -523,8 +515,9 @@ impl SpatialGraph {
         lon: f64,
         time_limits: Vec<f64>,
         network_type: NetworkType,
+        max_snap_m: Option<f64>,
     ) -> Option<Vec<Polygon>> {
-        let start_node = self.nearest_node(lat, lon)?;
+        let start_node = self.nearest_node_within(lat, lon, max_snap_m)?;
         Some(calculate_isochrones_concurrently(
             Arc::clone(&self.graph),
             start_node,
@@ -534,7 +527,8 @@ impl SpatialGraph {
     }
 }
 
-pub async fn calculate_isochrones_from_point(
+#[cfg(feature = "extension-module")]
+pub(crate) async fn calculate_isochrones_from_point(
     lat: f64,
     lon: f64,
     max_dist: Option<f64>,
@@ -542,6 +536,8 @@ pub async fn calculate_isochrones_from_point(
     network_type: overpass::NetworkType,
     retain_all: bool,
 ) -> Result<(Vec<Polygon>, SpatialGraph), OsmGraphError> {
+    use crate::cache;
+
     // Auto-size bounding box if not provided.
     // Use max time limit * a generous speed + 20% buffer to ensure the
     // isochrone never saturates into a square at the bbox boundary.
@@ -554,38 +550,29 @@ pub async fn calculate_isochrones_from_point(
         | NetworkType::AllPrivate => 120.0 / 3.6,
     };
     let max_time = time_limits.iter().cloned().fold(0.0_f64, f64::max);
-    let computed_dist = max_dist.unwrap_or_else(|| max_time * max_speed_m_per_s * 1.2);
+    let computed_dist = max_dist.unwrap_or(max_time * max_speed_m_per_s * 1.2);
 
     let polygon_coord_str = overpass::bbox_from_point(lat, lon, computed_dist);
     let query = overpass::create_overpass_query(&polygon_coord_str, network_type);
-    let graph_key = format!("{}:{}", query, retain_all);
 
-    let sg = if let Some(cached) = cache::check_cache(&graph_key)? {
-        cached
+    let xml = if let Some(cached_xml) = cache::check_xml_cache(&query)? {
+        cached_xml // in-memory hit
+    } else if let Some(disk_xml) = cache::check_disk_xml_cache(&query) {
+        cache::insert_into_xml_cache(query.clone(), disk_xml.clone())?; // promote to memory
+        disk_xml // disk hit
     } else {
-        let xml = if let Some(cached_xml) = cache::check_xml_cache(&query)? {
-            cached_xml // in-memory hit
-        } else if let Some(disk_xml) = cache::check_disk_xml_cache(&query) {
-            cache::insert_into_xml_cache(query.clone(), disk_xml.clone())?; // promote to memory
-            disk_xml // disk hit
-        } else {
-            let fetched =
-                overpass::make_request("https://overpass-api.de/api/interpreter", &query).await?;
-            cache::write_disk_xml_cache(&query, &fetched); // persist to disk (best-effort)
-            cache::insert_into_xml_cache(query.clone(), fetched.clone())?;
-            fetched // network fetch
-        };
-
-        let parsed = graph::parse_xml(&xml)?;
-        if parsed.nodes.is_empty() {
-            return Err(OsmGraphError::EmptyGraph);
-        }
-        let bidirectional = matches!(network_type, NetworkType::Walk);
-        let g = graph::create_graph(parsed.nodes, parsed.ways, retain_all, bidirectional);
-        let sg = SpatialGraph::new(g);
-        cache::insert_into_cache(graph_key, sg.clone())?;
-        sg
+        let fetched = overpass::make_request(&overpass::overpass_url(), &query).await?;
+        cache::write_disk_xml_cache(&query, &fetched); // persist to disk (best-effort)
+        cache::insert_into_xml_cache(query.clone(), fetched.clone())?;
+        fetched // network fetch
     };
+    let parsed = graph::parse_xml(&xml)?;
+    if parsed.nodes.is_empty() {
+        return Err(OsmGraphError::EmptyGraph);
+    }
+    let bidirectional = matches!(network_type, NetworkType::Walk);
+    let g = graph::create_graph(parsed.nodes, parsed.ways, retain_all, bidirectional);
+    let sg = SpatialGraph::new(g);
 
     let node_index = sg
         .nearest_node(lat, lon)

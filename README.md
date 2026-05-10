@@ -55,8 +55,12 @@ graph = gw.SpatialGraph.from_place(
 )
 
 isochrones = graph.isochrone(origin, minutes=[10, 20, 30])
-route = graph.route(origin, destination)
-reachable = graph.reachable(origin, minutes=15)
+route = graph.route(origin, destination, max_snap_m=100)
+reachable = graph.reachable(origin, minutes=15, max_snap_m=100)
+
+print(route.duration_s, route.distance_m)
+route_geojson = route.to_geojson()
+iso_geojson = isochrones[0].to_geojson()
 ```
 
 `SpatialGraph` is the central object. Reachability and network-time prism
@@ -80,8 +84,8 @@ possible_stops = prism.nodes()
 slack_polygon = prism.slack_polygon(min_slack_s=5 * 60)
 ```
 
-All geometry-producing methods return GeoJSON strings for easy use with common
-Python mapping and data-analysis tools.
+Routes, snap diagnostics, and isochrones return structured Python objects.
+Call `.to_geojson()` when you need serialized GeoJSON for mapping or data tools.
 
 ## Features
 
@@ -106,6 +110,25 @@ The examples directory and documentation show common workflows:
 - routing between coordinates
 - querying reachable nodes and graph views
 - working with POIs and GeoJSON output
+
+## Network Services
+
+`SpatialGraph.from_place(...)`, `gw.geocode(...)`, and POI fetching use public
+OpenStreetMap services by default. Graphways sends a descriptive User-Agent,
+rate-limits Nominatim geocoding requests, and retries transient `429` / `5xx`
+responses.
+
+For production workloads, local mirrors, or stricter service policies, configure
+the service layer with environment variables:
+
+```bash
+GRAPHWAYS_OVERPASS_URL=https://overpass-api.de/api/interpreter
+GRAPHWAYS_NOMINATIM_URL=https://nominatim.openstreetmap.org/search
+GRAPHWAYS_USER_AGENT="your-app/1.0 contact@example.com"
+GRAPHWAYS_CACHE_DIR=/path/to/graphways-cache
+```
+
+Use `SpatialGraph.from_pbf(...)` when you need fully offline graph construction.
 
 ## Performance
 

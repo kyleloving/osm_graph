@@ -20,18 +20,19 @@ bands appear on top.
 import json, graphways as gw, folium
 
 lat, lon = gw.geocode("Marienplatz, Munich, Germany")
-time_limits = [300, 600, 900, 1200, 1500, 1800]   # 5–30 min in 5-min steps
+time_limits = [300, 600, 900, 1200, 1500, 1800]   # 5-30 min in 5-min steps
 colors     = ["#2ecc71", "#27ae60", "#f1c40f", "#e67e22", "#e74c3c", "#c0392b"]
 labels     = [f"{t // 60} min walk" for t in time_limits]
 
+graph = gw.SpatialGraph.from_place("Marienplatz, Munich, Germany", network="walk", max_dist=5_000)
 isos = graph.isochrone((lat, lon), minutes=[t / 60 for t in time_limits])
 
 m = folium.Map(location=[lat, lon], zoom_start=14, tiles="Cartodb Positron")
 folium.Marker(location=[lat, lon], tooltip="Marienplatz").add_to(m)
 
-for geojson_str, color, label in reversed(list(zip(isos, colors, labels))):
+for iso, color, label in reversed(list(zip(isos, colors, labels))):
     folium.GeoJson(
-        json.loads(geojson_str),
+        json.loads(iso.to_geojson()),
         name=label,
         style_function=lambda _, c=color: {
             "fillColor": c, "color": c, "weight": 1.5, "fillOpacity": 0.2,
@@ -56,12 +57,12 @@ import json, graphways as gw, folium, branca.colormap
 origin = gw.geocode("Marienplatz, Munich, Germany")
 dest   = gw.geocode("English Garden, Munich, Germany")
 
-graph = gw.SpatialGraph.from_place("Marienplatz, Munich, Germany", network="drive", max_dist=10_000)`r`nroute_str = graph.route(origin, dest)
-route = json.loads(route_str)
-props  = route["properties"]
-coords = route["geometry"]["coordinates"]   # [lon, lat] per GeoJSON spec
-times  = props["cumulative_times_s"]
-total  = props["duration_s"]
+graph = gw.SpatialGraph.from_place("Marienplatz, Munich, Germany", network="drive", max_dist=10_000)
+route = graph.route(origin, dest)
+route_geojson = json.loads(route.to_geojson())
+coords = route_geojson["geometry"]["coordinates"]   # [lon, lat] per GeoJSON spec
+times  = route.cumulative_times_s
+total  = route.duration_s
 
 m = folium.Map(location=list(origin), zoom_start=14, tiles="Cartodb Positron")
 
@@ -99,19 +100,18 @@ lat, lon = gw.geocode("Marienplatz, Munich, Germany")
 # Build graph once, reuse for isochrone + POIs
 graph = gw.SpatialGraph.from_place("Marienplatz, Munich, Germany", network="walk", max_dist=3_000)
 isos  = graph.isochrone((lat, lon), minutes=[10])                     # 10-minute walk
-pois_str = graph.fetch_pois(isos[0])
-pois = json.loads(pois_str)
+pois = graph.fetch_pois(isos[0])
 
 m = folium.Map(location=[lat, lon], zoom_start=15, tiles="Cartodb Positron")
-folium.GeoJson(json.loads(isos[0]), style_function=lambda _: {
+folium.GeoJson(json.loads(isos[0].to_geojson()), style_function=lambda _: {
     "fillColor": "#3498db", "color": "#2980b9", "weight": 1.5, "fillOpacity": 0.15,
 }).add_to(m)
 
-for feature in pois["features"]:
-    tags = feature["properties"]
+for poi in pois.pois:
+    tags = poi.tags
     if tags.get("amenity") != "restaurant":
         continue
-    lon_p, lat_p = feature["geometry"]["coordinates"]
+    lat_p, lon_p = poi.lat, poi.lon
     name = tags.get("name", "Restaurant")
     cuisine = tags.get("cuisine", "")
     folium.Marker(
@@ -171,7 +171,7 @@ m = folium.Map(location=[48.137, 11.575], zoom_start=13, tiles="Cartodb Positron
 for name, (lat, lon) in stops.items():
     isos = graph.isochrone((lat, lon), minutes=[10])
     folium.GeoJson(
-        json.loads(isos[0]),
+        json.loads(isos[0].to_geojson()),
         style_function=lambda _: {
             "fillColor": "#3498db", "color": "#2980b9",
             "weight": 1.5, "fillOpacity": 0.15,

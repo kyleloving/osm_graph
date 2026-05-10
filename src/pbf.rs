@@ -36,7 +36,7 @@ impl SpatialGraph {
 /// Read a PBF file once and produce one `XmlData` per requested network type,
 /// plus the POIs found in the extract (POIs are network-type-independent).
 ///
-/// This avoids re-reading the PBF for each network type — useful at server
+/// This avoids re-reading the PBF for each network type -- useful at server
 /// startup when you want walk/bike/drive graphs for the same region.
 pub fn read_pbf_multi(
     path: impl AsRef<Path>,
@@ -158,6 +158,7 @@ pub fn read_pbf_multi(
                 walk_travel_time: 0.0,
                 bike_travel_time: 0.0,
                 drive_travel_time: 0.0,
+                geometry: Vec::new(),
             })
             .collect();
         out.insert(nt, XmlData { nodes, ways });
@@ -289,6 +290,7 @@ pub fn read_pbf(
             walk_travel_time: 0.0,
             bike_travel_time: 0.0,
             drive_travel_time: 0.0,
+            geometry: Vec::new(),
         })
         .collect();
 

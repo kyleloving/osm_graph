@@ -1,5 +1,7 @@
 use crate::error::OsmGraphError;
-use crate::overpass::CLIENT;
+use crate::overpass::{
+    is_retryable_status, nominatim_url, retry_delay, user_agent, wait_for_nominatim_slot, CLIENT,
+};
 use serde::Deserialize;
 
 #[derive(Deserialize)]
@@ -11,15 +13,44 @@ struct NominatimResult {
 /// Geocode a place name to (lat, lon) using the Nominatim API.
 /// Nominatim usage policy requires a descriptive User-Agent and max 1 req/sec.
 pub async fn geocode(place: &str) -> Result<(f64, f64), OsmGraphError> {
-    let response = CLIENT
-        .get("https://nominatim.openstreetmap.org/search")
-        .query(&[("q", place), ("format", "json"), ("limit", "1")])
-        .header(
-            "User-Agent",
-            "graphways/0.2 (https://github.com/kyleloving/graphways)",
-        )
-        .send()
-        .await?;
+    let url = nominatim_url();
+    let mut successful_response = None;
+    let mut final_error = None;
+
+    for attempt in 0..=2 {
+        wait_for_nominatim_slot().await;
+        let response = CLIENT
+            .get(&url)
+            .query(&[("q", place), ("format", "json"), ("limit", "1")])
+            .header("User-Agent", user_agent())
+            .send()
+            .await?;
+
+        if response.status().is_success() {
+            successful_response = Some(response);
+            break;
+        }
+
+        let status = response.status();
+        let headers = response.headers().clone();
+        let error = response.error_for_status().unwrap_err();
+        if attempt < 2 && is_retryable_status(status) {
+            retry_delay(&headers, attempt).await;
+            continue;
+        }
+
+        final_error = Some(error);
+        break;
+    }
+
+    let response = match successful_response {
+        Some(response) => response,
+        None => {
+            return Err(final_error
+                .expect("geocoding retry loop ended without success or error")
+                .into())
+        }
+    };
 
     let results: Vec<NominatimResult> = response.json().await?;
 

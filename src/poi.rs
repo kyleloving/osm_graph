@@ -3,7 +3,8 @@ use crate::error::OsmGraphError;
 use crate::graph::{SpatialGraph, XmlData};
 use crate::overpass;
 use crate::reachability::ReachabilityResult;
-use geo::{Contains, Coord, LineString, Point, Polygon};
+#[cfg(any(test, feature = "extension-module"))]
+use geo::{Coord, LineString, Polygon};
 use std::collections::HashMap;
 
 // ---------------------------------------------------------------------------
@@ -51,6 +52,7 @@ fn create_poi_query(bbox: &str) -> String {
 
 /// Extract a `south,west,north,east` Overpass bbox from an isochrone polygon.
 /// Internal coordinate convention: x = lat, y = lon.
+#[cfg(feature = "extension-module")]
 fn bbox_from_polygon(polygon: &Polygon<f64>) -> String {
     let mut min_lat = f64::MAX;
     let mut max_lat = f64::MIN;
@@ -73,7 +75,7 @@ async fn fetch_xml_cached(query: &str) -> Result<String, OsmGraphError> {
         cache::insert_into_xml_cache(query.to_string(), disk.clone())?;
         return Ok(disk);
     }
-    let fetched = overpass::make_request("https://overpass-api.de/api/interpreter", query).await?;
+    let fetched = overpass::make_request(&overpass::overpass_url(), query).await?;
     cache::write_disk_xml_cache(query, &fetched);
     cache::insert_into_xml_cache(query.to_string(), fetched.clone())?;
     Ok(fetched)
@@ -85,7 +87,8 @@ async fn fetch_xml_cached(query: &str) -> Result<String, OsmGraphError> {
 
 /// Parse a GeoJSON geometry string (as produced by `polygon_to_geojson_string`)
 /// back into a `geo::Polygon<f64>` using the library's internal x=lat, y=lon convention.
-pub fn parse_isochrone(geojson_str: &str) -> Result<Polygon<f64>, OsmGraphError> {
+#[cfg(any(test, feature = "extension-module"))]
+pub(crate) fn parse_isochrone(geojson_str: &str) -> Result<Polygon<f64>, OsmGraphError> {
     let gj: geojson::GeoJson = geojson_str
         .parse()
         .map_err(|_| OsmGraphError::InvalidInput("invalid GeoJSON".into()))?;
@@ -118,7 +121,10 @@ pub fn parse_isochrone(geojson_str: &str) -> Result<Polygon<f64>, OsmGraphError>
 /// are kept. It is fast and simple but uses polygon geometry as a proxy for
 /// network reachability. Prefer [`fetch_pois_within_reachability`] when a
 /// [`ReachabilityResult`] is already available.
-pub async fn fetch_pois_within(polygon: &Polygon<f64>) -> Result<Vec<Poi>, OsmGraphError> {
+#[cfg(feature = "extension-module")]
+pub(crate) async fn fetch_pois_within(polygon: &Polygon<f64>) -> Result<Vec<Poi>, OsmGraphError> {
+    use geo::{Contains, Point};
+
     let bbox = bbox_from_polygon(polygon);
     let query = create_poi_query(&bbox);
     let xml = fetch_xml_cached(&query).await?;
@@ -153,7 +159,7 @@ pub async fn fetch_pois_within(polygon: &Polygon<f64>) -> Result<Vec<Poi>, OsmGr
 /// the snapped node — the same value that drove the isochrone — not a
 /// straight-line estimate. POIs that snap to unreachable nodes (across a
 /// river, behind a highway, in a disconnected subgraph) are correctly excluded.
-pub async fn fetch_pois_within_reachability(
+pub(crate) async fn fetch_pois_within_reachability(
     sg: &SpatialGraph,
     reachability: &ReachabilityResult,
 ) -> Result<Vec<ReachablePoi>, OsmGraphError> {
@@ -191,7 +197,8 @@ pub async fn fetch_pois_within_reachability(
 }
 
 /// Serialize a slice of [`Poi`] to a GeoJSON FeatureCollection.
-pub fn pois_to_geojson(pois: &[Poi]) -> String {
+#[cfg(any(test, feature = "extension-module"))]
+pub(crate) fn pois_to_geojson(pois: &[Poi]) -> String {
     let features: Vec<geojson::Feature> = pois
         .iter()
         .map(|poi| {
@@ -201,40 +208,6 @@ pub fn pois_to_geojson(pois: &[Poi]) -> String {
                 .iter()
                 .map(|(k, v)| (k.clone(), geojson::JsonValue::String(v.clone())))
                 .collect();
-            geojson::Feature {
-                geometry: Some(geometry),
-                properties: Some(props),
-                ..Default::default()
-            }
-        })
-        .collect();
-
-    geojson::GeoJson::FeatureCollection(geojson::FeatureCollection {
-        features,
-        bbox: None,
-        foreign_members: None,
-    })
-    .to_string()
-}
-
-/// Serialize a slice of [`ReachablePoi`] to a GeoJSON FeatureCollection.
-/// Each feature includes all OSM tags as properties plus a `travel_time_s`
-/// field with the network travel time from the origin and `snap_distance_m`.
-pub fn reachable_pois_to_geojson(pois: &[ReachablePoi]) -> String {
-    let features: Vec<geojson::Feature> = pois
-        .iter()
-        .map(|rp| {
-            let geometry =
-                geojson::Geometry::new(geojson::Value::Point(vec![rp.poi.lon, rp.poi.lat]));
-            let mut props: geojson::JsonObject = rp
-                .poi
-                .tags
-                .iter()
-                .map(|(k, v)| (k.clone(), geojson::JsonValue::String(v.clone())))
-                .collect();
-            props.insert("travel_time_s".into(), rp.travel_time_s.into());
-            props.insert("snap_node_id".into(), rp.snap_node_id.into());
-            props.insert("snap_distance_m".into(), rp.snap_distance_m.into());
             geojson::Feature {
                 geometry: Some(geometry),
                 properties: Some(props),
@@ -349,44 +322,6 @@ mod tests {
             assert_eq!(
                 props["tourism"],
                 geojson::JsonValue::String("museum".to_string())
-            );
-        } else {
-            panic!("expected FeatureCollection");
-        }
-    }
-
-    #[test]
-    fn test_reachable_pois_to_geojson_includes_travel_time() {
-        let poi = Poi {
-            id: 1,
-            lat: 48.0,
-            lon: 11.0,
-            tags: HashMap::new(),
-        };
-        let rp = ReachablePoi {
-            poi,
-            travel_time_s: 42.5,
-            snap_node_id: 1001,
-            snap_distance_m: 7.0,
-        };
-        let json = reachable_pois_to_geojson(&[rp]);
-        let gj: geojson::GeoJson = json.parse().unwrap();
-        if let geojson::GeoJson::FeatureCollection(fc) = gj {
-            let props = fc.features[0].properties.as_ref().unwrap();
-            let tt = props["travel_time_s"].as_f64().unwrap();
-            let snap_node_id = props["snap_node_id"].as_i64().unwrap();
-            let snap = props["snap_distance_m"].as_f64().unwrap();
-            assert!(
-                (tt - 42.5).abs() < 1e-9,
-                "travel_time_s should be 42.5, got {tt}"
-            );
-            assert!(
-                snap_node_id == 1001,
-                "snap_node_id should be 1001, got {snap_node_id}"
-            );
-            assert!(
-                (snap - 7.0).abs() < 1e-9,
-                "snap_distance_m should be 7.0, got {snap}"
             );
         } else {
             panic!("expected FeatureCollection");

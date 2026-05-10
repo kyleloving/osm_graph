@@ -236,7 +236,7 @@ def headline_benchmark():
 
 
 # ===========================================================================
-# 2. Staged benchmark: one-time graph lookup/build vs per-query cost
+# 2. Staged benchmark: cached XML graph construction vs per-query cost
 # ===========================================================================
 
 
@@ -245,7 +245,7 @@ def staged_benchmark():
     print("2. graphways one-time vs per-query costs (cached)")
     print("=" * 72)
     print()
-    print("This separates cached graph construction/lookup from repeated")
+    print("This separates cached XML graph construction from repeated")
     print("isochrone queries on an already-built graph. The first uncached build")
     print("may include geocoding and Overpass I/O and is intentionally not measured.")
     print()
@@ -444,7 +444,7 @@ def make_chart(headline_results, out_path: str) -> None:
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 4.5))
     fig.suptitle(
-        "graphways vs NetworkX - compute time (cached graph, no network)",
+        "graphways vs NetworkX - compute time (prebuilt graph, no network)",
         fontsize=12,
     )
 

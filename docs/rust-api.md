@@ -1,33 +1,39 @@
 # Rust API
 
-The Rust API exposes the same core functionality without Python overhead.
-All async functions require a Tokio runtime.
+The Rust API exposes the same core graph operations without Python overhead.
 
-Full generated API documentation is published alongside this site:  
-**[Rust API docs →](https://docs.rs/graphways/)**
+Full generated API documentation is published alongside this site:
+**[Rust API docs ->](https://docs.rs/graphways/)**
 
 ---
 
 ## Quick example
 
 ```rust
-use graphways::isochrone::calculate_isochrones_from_point;
+use graphways::graph::SpatialGraph;
 use graphways::overpass::NetworkType;
 
-#[tokio::main]
-async fn main() {
-    let (isochrones, graph) = calculate_isochrones_from_point(
-        48.137144,
-        11.575399,
-        Some(10_000.0),                                        // max_dist in metres; None = auto
-        vec![300.0, 600.0, 900.0, 1_200.0, 1_500.0, 1_800.0],
-        NetworkType::Drive,
-        false,                                                 // false = simplified (faster)
-    )
-    .await
-    .unwrap();
+fn main() -> Result<(), graphways::error::OsmGraphError> {
+    let graph = SpatialGraph::from_pbf(
+        "data/district-of-columbia-latest.osm.pbf",
+        NetworkType::Walk,
+        None,
+    )?;
 
-    println!("{} isochrones, {} nodes", isochrones.len(), graph.graph.node_count());
+    let reachable = graph.reachable_graph(
+        38.9097,
+        -77.0432,
+        15.0 * 60.0,
+        NetworkType::Walk,
+        Some(100.0),
+    );
+
+    println!(
+        "{} nodes, reachable graph exists: {}",
+        graph.graph.node_count(),
+        reachable.is_some()
+    );
+    Ok(())
 }
 ```
 
@@ -65,7 +71,7 @@ A petgraph `DiGraph` bundled with an R-tree spatial index.  Both inner fields ar
 `Arc`-wrapped, so cloning a `SpatialGraph` is O(1).
 
 ```rust
-// Nearest-node lookup — O(log n)
+// Nearest-node lookup -- O(log n)
 let node_idx = sg.nearest_node(lat, lon)?;
 
 // Direct petgraph access
@@ -113,7 +119,8 @@ pub struct XmlNode {
 pub struct XmlWay {
     pub id: i64,
     pub tags: Vec<XmlTag>,
-    pub length: f64,           // metres
+    pub geometry: Vec<(f64, f64)>, // (lat, lon), including simplified edge shape
+    pub length: f64,           // meters
     pub speed_kph: f64,
     pub walk_travel_time: f64, // seconds
     pub bike_travel_time: f64, // seconds
@@ -125,27 +132,6 @@ pub struct XmlWay {
 
 ## Core functions
 
-### `calculate_isochrones_from_point`
-
-```rust
-pub async fn calculate_isochrones_from_point(
-    lat: f64,
-    lon: f64,
-    max_dist: Option<f64>,
-    time_limits: Vec<f64>,
-    network_type: NetworkType,
-    retain_all: bool,
-) -> Result<(Vec<Polygon>, SpatialGraph), OsmGraphError>
-```
-
-Fetch (or cache-hit) the road network, run a single Dijkstra pass, and compute
-triangulated contour polygons for each time limit.
-
-Pass `max_dist = None` to auto-size the bounding box from the largest time limit.
-Pass `time_limits = vec![]` to skip isochrone computation and only obtain the `SpatialGraph`.
-
----
-
 ### `routing::route`
 
 ```rust
@@ -156,10 +142,12 @@ pub fn route(
     dest_lat: f64,
     dest_lon: f64,
     network_type: NetworkType,
+    max_snap_m: Option<f64>,
 ) -> Result<Route, OsmGraphError>
 ```
 
-A\* point-to-point routing.  Returns a `Route`:
+A\* point-to-point routing. Pass `max_snap_m` to reject endpoints that snap too
+far from the graph. Returns a `Route`:
 
 ```rust
 pub struct Route {
@@ -167,6 +155,8 @@ pub struct Route {
     pub cumulative_times_s: Vec<f64>,   // parallel to coordinates
     pub distance_m: f64,
     pub duration_s: f64,
+    pub origin_snap: SnapResult,
+    pub destination_snap: SnapResult,
 }
 ```
 
@@ -189,6 +179,9 @@ pub async fn make_request(url: &str, query: &str) -> Result<String, reqwest::Err
 ```
 
 POST a query to an Overpass API endpoint and return the raw XML response.
+Transient `429` / `5xx` responses are retried. The default endpoint helpers
+respect `GRAPHWAYS_OVERPASS_URL`, `GRAPHWAYS_NOMINATIM_URL`, and
+`GRAPHWAYS_USER_AGENT`.
 
 ---
 
@@ -196,11 +189,18 @@ POST a query to an Overpass API endpoint and return the raw XML response.
 
 ```rust
 pub enum OsmGraphError {
-    XmlParseError(quick_xml::DeError),
-    RequestError(reqwest::Error),
+    Network(reqwest::Error),
+    XmlParse(quick_xml::DeError),
     EmptyGraph,
     NodeNotFound,
+    OriginNodeNotFound,
+    DestinationNodeNotFound,
+    SnapDistanceExceeded { role: &'static str, distance_m: f64, max_distance_m: f64 },
+    PathNotFound,
+    LockPoisoned,
+    GeocodingFailed(String),
     InvalidInput(String),
-    CacheError(String),
+    Io(std::io::Error),
+    PbfError(String),
 }
 ```

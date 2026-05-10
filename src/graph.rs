@@ -44,6 +44,13 @@ pub struct XmlWay {
     pub bike_travel_time: f64,
     #[serde(default)]
     pub drive_travel_time: f64,
+    /// Ordered route geometry as `(lat, lon)` points for this directed edge.
+    ///
+    /// Unsimplified edges contain their source and target coordinates.
+    /// Simplified edges retain the intermediate shape points from the collapsed
+    /// chain so route rendering follows the original road geometry.
+    #[serde(default)]
+    pub geometry: Vec<(f64, f64)>,
 }
 
 impl XmlWay {
@@ -51,7 +58,7 @@ impl XmlWay {
         const USEFUL_TAGS: &[&str] = &["highway", "name", "ref", "bridge", "tunnel", "service"];
         // Linear search on 15-element static slice — no HashSet allocation needed.
         self.tags
-            .retain(|tag| USEFUL_TAGS.iter().any(|&k| k == tag.key.as_str()));
+            .retain(|tag| USEFUL_TAGS.contains(&tag.key.as_str()));
         self
     }
 
@@ -103,18 +110,16 @@ fn assess_path_directionality(path: &XmlWay) -> Direction {
     let oneway_tag = find_tag(&path.tags, "oneway");
     let junction_tag = find_tag(&path.tags, "junction");
 
-    if oneway_tag.map_or(false, |tag| matches!(tag.value.as_str(), "-1" | "reverse")) {
+    if oneway_tag.is_some_and(|tag| matches!(tag.value.as_str(), "-1" | "reverse")) {
         return Direction::OneWayReverse;
     }
 
-    if oneway_tag.map_or(false, |tag| {
-        matches!(tag.value.as_str(), "yes" | "true" | "1")
-    }) {
+    if oneway_tag.is_some_and(|tag| matches!(tag.value.as_str(), "yes" | "true" | "1")) {
         return Direction::OneWayForward;
     }
 
     // Roundabouts are considered one-way implicitly
-    let is_roundabout = junction_tag.map_or(false, |tag| tag.value == "roundabout");
+    let is_roundabout = junction_tag.is_some_and(|tag| tag.value == "roundabout");
     if is_roundabout {
         Direction::OneWayForward
     } else {
@@ -158,7 +163,12 @@ fn way_speed_kph(way: &XmlWay) -> f64 {
         .unwrap_or(FALLBACK_SPEED_KPH)
 }
 
-fn edge_way_from_template(template: &XmlWay, length: f64, speed_kph: f64) -> XmlWay {
+fn edge_way_from_template(
+    template: &XmlWay,
+    length: f64,
+    speed_kph: f64,
+    geometry: Vec<(f64, f64)>,
+) -> XmlWay {
     XmlWay {
         id: template.id,
         nodes: Vec::new(),
@@ -168,6 +178,7 @@ fn edge_way_from_template(template: &XmlWay, length: f64, speed_kph: f64) -> Xml
         walk_travel_time: calculate_travel_time(length, 5.0),
         bike_travel_time: calculate_travel_time(length, 15.0),
         drive_travel_time: calculate_travel_time(length, speed_kph),
+        geometry,
     }
 }
 
@@ -201,33 +212,82 @@ pub fn create_graph(
             if let [start_ref, end_ref] = window {
                 let start_index = node_index_map[&start_ref.node_id];
                 let end_index = node_index_map[&end_ref.node_id];
-                let length = {
+                let (length, forward_geometry, reverse_geometry) = {
                     let start_node = &graph[start_index];
                     let end_node = &graph[end_index];
-                    calculate_distance(start_node.lat, start_node.lon, end_node.lat, end_node.lon)
+                    let length = calculate_distance(
+                        start_node.lat,
+                        start_node.lon,
+                        end_node.lat,
+                        end_node.lon,
+                    );
+                    (
+                        length,
+                        vec![
+                            (start_node.lat, start_node.lon),
+                            (end_node.lat, end_node.lon),
+                        ],
+                        vec![
+                            (end_node.lat, end_node.lon),
+                            (start_node.lat, start_node.lon),
+                        ],
+                    )
                 };
-                let edge_way = edge_way_from_template(&filtered_way, length, speed_kph);
-
                 match path_direction {
                     Direction::OneWayForward => {
+                        let edge_way = edge_way_from_template(
+                            &filtered_way,
+                            length,
+                            speed_kph,
+                            forward_geometry.clone(),
+                        );
                         graph.add_edge(start_index, end_index, edge_way);
                     }
                     Direction::OneWayReverse => {
-                        graph.add_edge(end_index, start_index, edge_way);
+                        let reverse_way = edge_way_from_template(
+                            &filtered_way,
+                            length,
+                            speed_kph,
+                            reverse_geometry.clone(),
+                        );
+                        graph.add_edge(end_index, start_index, reverse_way);
                     }
                     Direction::Bidirectional => {
-                        graph.add_edge(start_index, end_index, edge_way.clone());
-                        graph.add_edge(end_index, start_index, edge_way);
+                        let edge_way = edge_way_from_template(
+                            &filtered_way,
+                            length,
+                            speed_kph,
+                            forward_geometry.clone(),
+                        );
+                        let reverse_way = edge_way_from_template(
+                            &filtered_way,
+                            length,
+                            speed_kph,
+                            reverse_geometry.clone(),
+                        );
+                        graph.add_edge(start_index, end_index, edge_way);
+                        graph.add_edge(end_index, start_index, reverse_way);
                     }
                 }
 
                 if bidirectional && path_direction != Direction::Bidirectional {
-                    let reverse_way = edge_way_from_template(&filtered_way, length, speed_kph);
                     match path_direction {
                         Direction::OneWayForward => {
+                            let reverse_way = edge_way_from_template(
+                                &filtered_way,
+                                length,
+                                speed_kph,
+                                reverse_geometry.clone(),
+                            );
                             graph.add_edge(end_index, start_index, reverse_way);
                         }
                         Direction::OneWayReverse => {
+                            let reverse_way = edge_way_from_template(
+                                &filtered_way,
+                                length,
+                                speed_kph,
+                                forward_geometry.clone(),
+                            );
                             graph.add_edge(start_index, end_index, reverse_way);
                         }
                         Direction::Bidirectional => {}
@@ -418,17 +478,31 @@ impl SpatialGraph {
             }
         })
     }
-}
 
-// Keep the free function for backwards compatibility but delegate to SpatialGraph
-// NOTE: this clones the entire graph to build a temporary R-tree — prefer
-// constructing a `SpatialGraph` directly and reusing it.
-#[deprecated(
-    since = "0.0.0",
-    note = "construct a SpatialGraph and call nearest_node instead"
-)]
-pub fn latlon_to_node(graph: &DiGraph<XmlNode, XmlWay>, lat: f64, lon: f64) -> Option<NodeIndex> {
-    SpatialGraph::new(graph.clone()).nearest_node(lat, lon)
+    /// Snap a coordinate to the nearest graph node, optionally rejecting snaps
+    /// farther than `max_distance_m`.
+    pub fn snap_point_within(
+        &self,
+        lat: f64,
+        lon: f64,
+        max_distance_m: Option<f64>,
+    ) -> Option<SnapResult> {
+        let snap = self.snap_point(lat, lon)?;
+        match max_distance_m {
+            Some(max_distance_m) if snap.distance_m > max_distance_m => None,
+            _ => Some(snap),
+        }
+    }
+
+    pub fn nearest_node_within(
+        &self,
+        lat: f64,
+        lon: f64,
+        max_distance_m: Option<f64>,
+    ) -> Option<NodeIndex> {
+        self.snap_point_within(lat, lon, max_distance_m)
+            .map(|snap| snap.node_index)
+    }
 }
 
 #[cfg(test)]
@@ -464,6 +538,7 @@ mod tests {
             walk_travel_time: 0.0,
             bike_travel_time: 0.0,
             drive_travel_time: 0.0,
+            geometry: Vec::new(),
         }
     }
 
@@ -645,6 +720,16 @@ mod tests {
         assert_eq!(snap.node_lat, 48.0);
         assert_eq!(snap.node_lon, 11.0);
         assert!(snap.distance_m > 0.0);
+    }
+
+    #[test]
+    fn test_snap_point_within_rejects_far_snap() {
+        let mut graph = DiGraph::new();
+        graph.add_node(make_node(1, 48.0, 11.0));
+        let sg = SpatialGraph::new(graph);
+
+        assert!(sg.snap_point_within(48.001, 11.001, Some(500.0)).is_some());
+        assert!(sg.snap_point_within(48.001, 11.001, Some(1.0)).is_none());
     }
 
     #[test]

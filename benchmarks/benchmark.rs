@@ -1,10 +1,12 @@
 //! Unified benchmark harness for the local PBF pipeline.
 //!
 //! This measures both one-shot setup (PBF parse, graph build, spatial index)
-//! and steady-state hot-path work (snap origin, Dijkstra, hull construction).
+//! and steady-state hot-path work (snap origin, Dijkstra, contour construction).
 //!
 //! Usage:
-//!     cargo run --release --example benchmark -- data/district-of-columbia-latest.osm.pbf
+//! This file is a repo-local profiling harness. If you want to run it through
+//! Cargo, temporarily expose it as an example target or move it into
+//! `examples/benchmark.rs`.
 //!
 //! Env vars:
 //!     ITERS=10          measured hot-path iterations (default 10)
@@ -463,7 +465,7 @@ fn print_hot_path(config: &Config, setup: &SetupTimings, stats: &HotPathStats) {
     if !stats.hull_limits.is_empty() {
         println!();
         println!(
-            "hull breakdown (single-limit calls; saturated-polygon reuse is only reflected above):"
+            "contour breakdown (single-limit calls; saturated-polygon reuse is only reflected above):"
         );
         println!("  {:>8} {:>10} {:>10}", "limit_s", "points", "mean_ms");
         for limit in &stats.hull_limits {

@@ -70,6 +70,7 @@ fn collapse_path_edges(graph: &DiGraph<XmlNode, XmlWay>, edges: &[EdgeIndex]) ->
     let mut total_drive = 0.0;
     let mut weighted_speed_sum = 0.0;
     let mut tags: Option<Vec<XmlTag>> = None;
+    let mut geometry: Vec<(f64, f64)> = Vec::new();
 
     for &edge in edges {
         let way = graph.edge_weight(edge).unwrap();
@@ -81,6 +82,7 @@ fn collapse_path_edges(graph: &DiGraph<XmlNode, XmlWay>, edges: &[EdgeIndex]) ->
         if tags.is_none() {
             tags = Some(way.tags.clone());
         }
+        append_edge_geometry(graph, edge, &mut geometry);
     }
 
     let speed_kph = if total_length > 0.0 {
@@ -98,6 +100,42 @@ fn collapse_path_edges(graph: &DiGraph<XmlNode, XmlWay>, edges: &[EdgeIndex]) ->
         walk_travel_time: total_walk,
         bike_travel_time: total_bike,
         drive_travel_time: total_drive,
+        geometry,
+    }
+}
+
+fn append_edge_geometry(
+    graph: &DiGraph<XmlNode, XmlWay>,
+    edge: EdgeIndex,
+    out: &mut Vec<(f64, f64)>,
+) {
+    let (source, target) = graph.edge_endpoints(edge).unwrap();
+    let way = graph.edge_weight(edge).unwrap();
+    let mut points = if way.geometry.len() >= 2 {
+        way.geometry.clone()
+    } else {
+        vec![
+            (graph[source].lat, graph[source].lon),
+            (graph[target].lat, graph[target].lon),
+        ]
+    };
+
+    let source_point = (graph[source].lat, graph[source].lon);
+    let target_point = (graph[target].lat, graph[target].lon);
+    let first = *points.first().unwrap();
+    let last = *points.last().unwrap();
+    let matches_forward = calculate_distance(first.0, first.1, source_point.0, source_point.1)
+        + calculate_distance(last.0, last.1, target_point.0, target_point.1)
+        <= calculate_distance(first.0, first.1, target_point.0, target_point.1)
+            + calculate_distance(last.0, last.1, source_point.0, source_point.1);
+    if !matches_forward {
+        points.reverse();
+    }
+
+    if out.is_empty() {
+        out.extend(points);
+    } else {
+        out.extend(points.into_iter().skip(1));
     }
 }
 
@@ -369,6 +407,25 @@ mod tests {
             walk_travel_time: 72.0,
             bike_travel_time: 24.0,
             drive_travel_time,
+            geometry: Vec::new(),
+        }
+    }
+
+    fn make_way_with_length(id: i64, drive_travel_time: f64, length: f64) -> XmlWay {
+        XmlWay {
+            length,
+            ..make_way(id, drive_travel_time)
+        }
+    }
+
+    fn make_way_with_geometry(
+        id: i64,
+        drive_travel_time: f64,
+        geometry: Vec<(f64, f64)>,
+    ) -> XmlWay {
+        XmlWay {
+            geometry,
+            ..make_way(id, drive_travel_time)
         }
     }
 
@@ -433,5 +490,116 @@ mod tests {
         let collapsed = collapse_path_edges(&graph, &path.edges);
 
         assert_eq!(collapsed.drive_travel_time, 30.0);
+    }
+
+    #[test]
+    fn linear_chain_collapses_to_single_summed_edge() {
+        let mut graph = DiGraph::new();
+        let a = graph.add_node(make_node(1, 0.0, 0.0));
+        let b = graph.add_node(make_node(2, 0.001, 0.0));
+        let c = graph.add_node(make_node(3, 0.002, 0.0));
+        let d = graph.add_node(make_node(4, 0.003, 0.0));
+        graph.add_edge(a, b, make_way_with_length(1, 10.0, 100.0));
+        graph.add_edge(b, c, make_way_with_length(2, 20.0, 200.0));
+        graph.add_edge(c, d, make_way_with_length(3, 30.0, 300.0));
+
+        let simplified = simplify_graph(&graph);
+
+        assert_eq!(simplified.node_count(), 2);
+        assert_eq!(simplified.edge_count(), 1);
+        let edge = simplified.edge_weights().next().unwrap();
+        assert_eq!(edge.drive_travel_time, 60.0);
+        assert_eq!(edge.length, 600.0);
+    }
+
+    #[test]
+    fn linear_chain_preserves_intermediate_geometry() {
+        let mut graph = DiGraph::new();
+        let a = graph.add_node(make_node(1, 0.0, 0.0));
+        let b = graph.add_node(make_node(2, 0.001, 0.0));
+        let c = graph.add_node(make_node(3, 0.002, 0.0));
+        let d = graph.add_node(make_node(4, 0.003, 0.0));
+        graph.add_edge(
+            a,
+            b,
+            make_way_with_geometry(1, 10.0, vec![(0.0, 0.0), (0.0005, 0.0002), (0.001, 0.0)]),
+        );
+        graph.add_edge(
+            b,
+            c,
+            make_way_with_geometry(2, 20.0, vec![(0.001, 0.0), (0.0015, 0.0002), (0.002, 0.0)]),
+        );
+        graph.add_edge(
+            c,
+            d,
+            make_way_with_geometry(3, 30.0, vec![(0.002, 0.0), (0.0025, 0.0002), (0.003, 0.0)]),
+        );
+
+        let simplified = simplify_graph(&graph);
+        let edge = simplified.edge_weights().next().unwrap();
+
+        assert_eq!(
+            edge.geometry,
+            vec![
+                (0.0, 0.0),
+                (0.0005, 0.0002),
+                (0.001, 0.0),
+                (0.0015, 0.0002),
+                (0.002, 0.0),
+                (0.0025, 0.0002),
+                (0.003, 0.0),
+            ]
+        );
+    }
+
+    #[test]
+    fn t_junction_preserves_decision_node() {
+        let mut graph = DiGraph::new();
+        let west = graph.add_node(make_node(1, 0.0, 0.0));
+        let center = graph.add_node(make_node(2, 0.001, 0.0));
+        let east = graph.add_node(make_node(3, 0.002, 0.0));
+        let north = graph.add_node(make_node(4, 0.001, 0.001));
+        graph.add_edge(west, center, make_way(1, 10.0));
+        graph.add_edge(center, east, make_way(2, 10.0));
+        graph.add_edge(center, north, make_way(3, 10.0));
+
+        let simplified = simplify_graph(&graph);
+
+        assert_eq!(simplified.node_count(), 4);
+        assert_eq!(simplified.edge_count(), 3);
+    }
+
+    #[test]
+    fn simplification_preserves_oneway_direction() {
+        let mut graph = DiGraph::new();
+        let a = graph.add_node(make_node(1, 0.0, 0.0));
+        let b = graph.add_node(make_node(2, 0.001, 0.0));
+        let c = graph.add_node(make_node(3, 0.002, 0.0));
+        graph.add_edge(a, b, make_way(1, 10.0));
+        graph.add_edge(b, c, make_way(2, 10.0));
+
+        let simplified = simplify_graph(&graph);
+        let edge = simplified.edge_references().next().unwrap();
+        let source = &simplified[edge.source()];
+        let target = &simplified[edge.target()];
+
+        assert_eq!(simplified.edge_count(), 1);
+        assert!(source.lat < target.lat);
+    }
+
+    #[test]
+    fn simplification_does_not_connect_near_crossing_roads() {
+        let mut graph = DiGraph::new();
+        let west = graph.add_node(make_node(1, 0.0, -0.001));
+        let east = graph.add_node(make_node(2, 0.0, 0.001));
+        let south = graph.add_node(make_node(3, -0.001, 0.0));
+        let north = graph.add_node(make_node(4, 0.001, 0.0));
+        graph.add_edge(west, east, make_way(1, 10.0));
+        graph.add_edge(south, north, make_way(2, 10.0));
+
+        let simplified = simplify_graph(&graph);
+
+        assert_eq!(simplified.node_count(), 4);
+        assert_eq!(simplified.edge_count(), 2);
     }
 }

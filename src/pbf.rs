@@ -36,7 +36,7 @@ impl SpatialGraph {
 /// Read a PBF file once and produce one `XmlData` per requested network type,
 /// plus the POIs found in the extract (POIs are network-type-independent).
 ///
-/// This avoids re-reading the PBF for each network type — useful at server
+/// This avoids re-reading the PBF for each network type -- useful at server
 /// startup when you want walk/bike/drive graphs for the same region.
 pub fn read_pbf_multi(
     path: impl AsRef<Path>,
@@ -158,6 +158,7 @@ pub fn read_pbf_multi(
                 walk_travel_time: 0.0,
                 bike_travel_time: 0.0,
                 drive_travel_time: 0.0,
+                geometry: Vec::new(),
             })
             .collect();
         out.insert(nt, XmlData { nodes, ways });
@@ -289,6 +290,7 @@ pub fn read_pbf(
             walk_travel_time: 0.0,
             bike_travel_time: 0.0,
             drive_travel_time: 0.0,
+            geometry: Vec::new(),
         })
         .collect();
 
@@ -325,6 +327,26 @@ struct RawWay {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::graph::parse_xml;
+
+    const TINY_PBF: &str = "tests/fixtures/tiny_map.osm.pbf";
+    const TINY_DRIVE_XML: &str = include_str!("../tests/fixtures/tiny_drive_overpass.osm");
+
+    fn sorted_ids<T, F>(items: &[T], mut id: F) -> Vec<i64>
+    where
+        F: FnMut(&T) -> i64,
+    {
+        let mut ids: Vec<i64> = items.iter().map(|item| id(item)).collect();
+        ids.sort_unstable();
+        ids
+    }
+
+    fn way_tag_value(way: &XmlWay, key: &str) -> Option<String> {
+        way.tags
+            .iter()
+            .find(|tag| tag.key == key)
+            .map(|tag| tag.value.clone())
+    }
 
     #[test]
     fn pois_from_nodes_preserves_poi_data() {
@@ -354,5 +376,88 @@ mod tests {
         assert_eq!(pois[0].lat, 38.9);
         assert_eq!(pois[0].lon, -77.0);
         assert_eq!(pois[0].tags["amenity"], "restaurant");
+    }
+
+    #[test]
+    fn tiny_pbf_drive_profile_filters_roads_and_separates_pois() {
+        let (data, pois) = read_pbf(TINY_PBF, NetworkType::Drive).unwrap();
+
+        assert_eq!(sorted_ids(&data.nodes, |node| node.id), vec![1, 2, 3, 4]);
+        assert_eq!(sorted_ids(&data.ways, |way| way.id), vec![10, 20]);
+        assert_eq!(sorted_ids(&pois, |poi| poi.id), vec![100]);
+        assert_eq!(pois[0].tags["amenity"], "cafe");
+    }
+
+    #[test]
+    fn tiny_pbf_profile_differences_are_visible() {
+        let (drive, _) = read_pbf(TINY_PBF, NetworkType::Drive).unwrap();
+        let (drive_service, _) = read_pbf(TINY_PBF, NetworkType::DriveService).unwrap();
+        let (walk, _) = read_pbf(TINY_PBF, NetworkType::Walk).unwrap();
+
+        assert_eq!(sorted_ids(&drive.ways, |way| way.id), vec![10, 20]);
+        assert_eq!(
+            sorted_ids(&drive_service.ways, |way| way.id),
+            vec![10, 20, 30]
+        );
+        assert_eq!(sorted_ids(&walk.ways, |way| way.id), vec![10, 20, 30, 40]);
+    }
+
+    #[test]
+    fn tiny_pbf_drive_matches_expected_overpass_xml_shape() {
+        let (pbf_data, _) = read_pbf(TINY_PBF, NetworkType::Drive).unwrap();
+        let xml_data = parse_xml(TINY_DRIVE_XML).unwrap();
+
+        assert_eq!(
+            sorted_ids(&pbf_data.nodes, |node| node.id),
+            sorted_ids(&xml_data.nodes, |node| node.id)
+        );
+        assert_eq!(
+            sorted_ids(&pbf_data.ways, |way| way.id),
+            sorted_ids(&xml_data.ways, |way| way.id)
+        );
+
+        for expected in &xml_data.ways {
+            let actual = pbf_data
+                .ways
+                .iter()
+                .find(|way| way.id == expected.id)
+                .unwrap();
+            let actual_refs: Vec<i64> = actual.nodes.iter().map(|node| node.node_id).collect();
+            let expected_refs: Vec<i64> = expected.nodes.iter().map(|node| node.node_id).collect();
+            assert_eq!(actual_refs, expected_refs);
+            assert_eq!(
+                way_tag_value(actual, "highway"),
+                way_tag_value(expected, "highway")
+            );
+            assert_eq!(
+                way_tag_value(actual, "oneway"),
+                way_tag_value(expected, "oneway")
+            );
+            assert_eq!(
+                way_tag_value(actual, "maxspeed"),
+                way_tag_value(expected, "maxspeed")
+            );
+        }
+    }
+
+    #[test]
+    fn tiny_pbf_multi_matches_single_profile_reads() {
+        let (multi, pois) =
+            read_pbf_multi(TINY_PBF, &[NetworkType::Drive, NetworkType::Walk]).unwrap();
+        let (drive, drive_pois) = read_pbf(TINY_PBF, NetworkType::Drive).unwrap();
+        let (walk, _) = read_pbf(TINY_PBF, NetworkType::Walk).unwrap();
+
+        assert_eq!(
+            sorted_ids(&pois, |poi| poi.id),
+            sorted_ids(&drive_pois, |poi| poi.id)
+        );
+        assert_eq!(
+            sorted_ids(&multi[&NetworkType::Drive].ways, |way| way.id),
+            sorted_ids(&drive.ways, |way| way.id)
+        );
+        assert_eq!(
+            sorted_ids(&multi[&NetworkType::Walk].ways, |way| way.id),
+            sorted_ids(&walk.ways, |way| way.id)
+        );
     }
 }

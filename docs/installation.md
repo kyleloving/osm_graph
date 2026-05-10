@@ -21,7 +21,7 @@ pip install maturin
 maturin develop --release
 ```
 
-`maturin develop` compiles the Rust extension and installs it into the current Python environment in one step.  The `--release` flag enables compiler optimisations — omit it only for debug builds.
+`maturin develop` compiles the Rust extension and installs it into the current Python environment in one step. The `--release` flag enables compiler optimizations -- omit it only for debug builds.
 
 ## Rust
 
@@ -29,14 +29,14 @@ Add to `Cargo.toml`:
 
 ```toml
 [dependencies]
-graphways = "0.2.0"
+graphways = "0.4.0"
 ```
 
 > **Note:** The crate is published as `graphways`; the library module is `graphways` (matching the Python package name).
 
 ## Dependencies
 
-graphways has no required Python dependencies — all heavy lifting is in Rust.
+graphways has no required Python dependencies -- all heavy lifting is in Rust.
 
 Optional Python packages used in the examples:
 

@@ -1,4 +1,4 @@
-//! Two-sided feasibility: "which nodes can I visit between origin and destination
+//! Network-time prisms: "which nodes can I visit between origin and destination
 //! within a given time budget, and how much slack remains?"
 //!
 //! # Concept
@@ -114,6 +114,21 @@ impl std::fmt::Display for InfeasibleReason {
 
 impl std::error::Error for InfeasibleReason {}
 
+/// Graph-shaped view for a two-ended, time-bounded query.
+///
+/// A `PrismGraph` represents the nodes that can be reached from an
+/// origin and can still reach a destination within the available travel-time
+/// budget. It keeps the original graph and the inbound, outbound, and slack
+/// labels, and only materializes an induced subgraph when a constrained
+/// operation needs one.
+#[derive(Clone)]
+pub struct PrismGraph {
+    /// Parent graph. The prism node set is stored in `result`.
+    pub graph: SpatialGraph,
+    pub result: FeasibilityResult,
+    pub network_type: NetworkType,
+}
+
 // ---------------------------------------------------------------------------
 // Core computation
 // ---------------------------------------------------------------------------
@@ -132,8 +147,9 @@ impl std::error::Error for InfeasibleReason {}
 /// * `origin`         – Starting node index.
 /// * `destination`    – Ending node index.
 /// * `available_time` – Total time budget in seconds. Subtract any activity
-///                      duration or buffer *before* calling.
+///   duration or buffer *before* calling.
 /// * `network_type`   – Determines which edge weight (walk / bike / drive) is used.
+///
 /// Compute two-sided feasibility with a caller-supplied edge cost.
 ///
 /// The closure is invoked once per edge relaxation in *both* the forward and
@@ -254,7 +270,8 @@ pub fn compute_feasibility(
 /// * `graph`     – The road network (needed to look up node coordinates).
 /// * `result`    – Output of [`compute_feasibility`].
 /// * `min_slack` – Minimum remaining slack (seconds) a node must have to be
-///                 included. Pass `0.0` to include every feasible node.
+///   included. Pass `0.0` to include every feasible node.
+///
 /// Returns `None` if fewer than three qualifying nodes exist (a polygon cannot
 /// be formed).
 pub fn build_feasibility_polygon(
@@ -281,38 +298,100 @@ pub fn build_feasibility_polygon(
 // SpatialGraph entry points
 // ---------------------------------------------------------------------------
 
-impl SpatialGraph {
-    /// Public API alias for two-sided reachability.
-    ///
-    /// A node is included when `origin -> node -> destination` fits within
-    /// `max_time` seconds. If callers need activity time or a safety buffer,
-    /// subtract those from the total window before calling.
-    pub fn reachable_between(
+fn prism_subgraph(sg: &SpatialGraph, result: &FeasibilityResult) -> SpatialGraph {
+    let mut subgraph = DiGraph::new();
+    let mut old_to_new = HashMap::new();
+
+    for &old_idx in result.feasible.keys() {
+        let new_idx = subgraph.add_node(sg.graph[old_idx].clone());
+        old_to_new.insert(old_idx, new_idx);
+    }
+
+    for edge in sg.graph.edge_references() {
+        let (Some(&source), Some(&target)) = (
+            old_to_new.get(&edge.source()),
+            old_to_new.get(&edge.target()),
+        ) else {
+            continue;
+        };
+        subgraph.add_edge(source, target, edge.weight().clone());
+    }
+
+    SpatialGraph::new(subgraph)
+}
+
+impl PrismGraph {
+    pub fn node_count(&self) -> usize {
+        self.result.feasible.len()
+    }
+
+    pub fn edge_count(&self) -> usize {
+        self.graph
+            .graph
+            .edge_references()
+            .filter(|edge| {
+                self.result.feasible.contains_key(&edge.source())
+                    && self.result.feasible.contains_key(&edge.target())
+            })
+            .count()
+    }
+
+    pub fn contains_node_id(&self, node_id: i64) -> bool {
+        self.result
+            .feasible
+            .keys()
+            .any(|&idx| self.graph.graph[idx].id == node_id)
+    }
+
+    pub fn slack_at_node_id(&self, node_id: i64) -> Option<f64> {
+        self.result
+            .feasible
+            .iter()
+            .find_map(|(&idx, node)| (self.graph.graph[idx].id == node_id).then_some(node.slack))
+    }
+
+    pub fn materialize(&self) -> SpatialGraph {
+        prism_subgraph(&self.graph, &self.result)
+    }
+
+    pub fn route(
         &self,
         origin_lat: f64,
         origin_lon: f64,
         dest_lat: f64,
         dest_lon: f64,
-        max_time: f64,
-        network_type: NetworkType,
-    ) -> Option<Result<FeasibilityResult, InfeasibleReason>> {
-        self.feasibility(
+        max_snap_m: Option<f64>,
+    ) -> Result<crate::routing::Route, crate::error::OsmGraphError> {
+        self.materialize().route(
             origin_lat,
             origin_lon,
             dest_lat,
             dest_lon,
-            max_time,
-            network_type,
+            self.network_type,
+            max_snap_m,
         )
     }
 
-    /// Compute which nodes can be visited between two lat/lon points within
-    /// `available_time` seconds, and how much time remains at each.
+    pub fn isochrones(
+        &self,
+        lat: f64,
+        lon: f64,
+        time_limits: Vec<f64>,
+        max_snap_m: Option<f64>,
+    ) -> Option<Vec<geo::Polygon>> {
+        self.materialize()
+            .isochrones(lat, lon, time_limits, self.network_type, max_snap_m)
+    }
+}
+
+impl SpatialGraph {
+    /// Return the network-time prism between two coordinates.
     ///
-    /// Snaps both points to the nearest graph nodes before running the search.
-    /// Returns `None` if either point has no nearby node; otherwise delegates
-    /// to [`compute_feasibility`] and propagates its `Result`.
-    pub fn feasibility(
+    /// The result is a lightweight graph view over every node `v` satisfying
+    /// `origin -> v -> destination <= available_time`, with each node labeled
+    /// by inbound time, outbound time, and slack.
+    #[allow(clippy::too_many_arguments)]
+    pub fn prism(
         &self,
         origin_lat: f64,
         origin_lon: f64,
@@ -320,16 +399,22 @@ impl SpatialGraph {
         dest_lon: f64,
         available_time: f64,
         network_type: NetworkType,
-    ) -> Option<Result<FeasibilityResult, InfeasibleReason>> {
-        let origin = self.nearest_node(origin_lat, origin_lon)?;
-        let destination = self.nearest_node(dest_lat, dest_lon)?;
-        Some(compute_feasibility(
+        max_snap_m: Option<f64>,
+    ) -> Option<Result<PrismGraph, InfeasibleReason>> {
+        let origin = self.nearest_node_within(origin_lat, origin_lon, max_snap_m)?;
+        let destination = self.nearest_node_within(dest_lat, dest_lon, max_snap_m)?;
+        let result = compute_feasibility(
             &self.graph,
             origin,
             destination,
             available_time,
             network_type,
-        ))
+        );
+        Some(result.map(|result| PrismGraph {
+            graph: self.clone(),
+            result,
+            network_type,
+        }))
     }
 }
 
@@ -372,6 +457,7 @@ mod tests {
             walk_travel_time: 0.0,
             bike_travel_time: 0.0,
             drive_travel_time: 0.0,
+            geometry: Vec::new(),
         }
     }
 
@@ -452,6 +538,26 @@ mod tests {
             .get(&dest)
             .expect("destination must be feasible");
         assert_eq!(d.outbound_time, 0.0, "destination outbound should be 0");
+    }
+
+    #[test]
+    fn prism_graph_view_exposes_induced_counts_and_slack_labels() {
+        let sg = SpatialGraph::new(linear_graph());
+        let prism = sg
+            .prism(0.0, 0.0, 0.003, 0.0, 10_000.0, NetworkType::Drive, None)
+            .expect("origin and destination should snap")
+            .expect("budget should be feasible");
+
+        assert_eq!(prism.node_count(), 4);
+        assert_eq!(prism.edge_count(), 6);
+        assert!(prism.contains_node_id(1));
+        assert!(prism.contains_node_id(4));
+        assert!(prism.slack_at_node_id(2).is_some());
+        assert_eq!(prism.graph.graph.node_count(), 4);
+        assert_eq!(
+            prism.materialize().graph.node_count(),
+            prism.result.feasible.len()
+        );
     }
 
     #[test]

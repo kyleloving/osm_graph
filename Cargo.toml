@@ -1,6 +1,6 @@
 [package]
 name = "graphways"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/kyleloving/graphways"
@@ -15,6 +15,9 @@ exclude = [
     "/site",
     "/target",
     "/benchmarks",
+    "/examples/__pycache__",
+    "/examples/cache",
+    "/examples/*.ipynb",
     "/examples/*.py",
     "/*.html",
     "/*.png",
@@ -23,12 +26,12 @@ exclude = [
     "/pyproject.toml",
     "/pysochrone.py",
 ]
-description = "Fast OpenStreetMap reachability, routing, and isochrones from Python, powered by Rust — no routing server required."
+description = "Fast OpenStreetMap reachability, routing, and isochrones from Python, powered by Rust -- no routing server required."
 
 [lib]
 name = "graphways"
-# cdylib  — Python extension module (.so / .pyd)
-# rlib    — normal Rust library; lets other Rust crates depend on this package
+# cdylib  -- Python extension module (.so / .pyd)
+# rlib    -- normal Rust library; lets other Rust crates depend on this package
 crate-type = ["cdylib", "rlib"]
 
 [features]
@@ -44,14 +47,12 @@ debug = true
 [dependencies]
 pyo3 = { version = "0.20.2", optional = true }
 reqwest = { version = "0.11", features = ["json"] }
-tokio = { version = "1", features = ["full"] }
-lazy_static = "1.4.0"
+tokio = { version = "1", features = ["rt-multi-thread", "time"] }
 quick-xml = { version = "0.31", features = ["serialize"] }
 serde = { version = "1.0" , features = ["derive"] }
 petgraph = "0.6.4"
 geo = "0.28.0"
 geojson = "0.24.1"
-lru = "0.12.2"
 rstar = "0.12"
 osmpbf = "0.3"
 spade = "2.15.1"

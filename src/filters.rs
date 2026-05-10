@@ -284,6 +284,13 @@ pub fn is_poi_node(tags: &[(String, String)]) -> bool {
 mod tests {
     use super::*;
 
+    fn tags(pairs: &[(&str, &str)]) -> Vec<(String, String)> {
+        pairs
+            .iter()
+            .map(|(key, value)| ((*key).to_string(), (*value).to_string()))
+            .collect()
+    }
+
     // --- POI ---
 
     #[test]
@@ -313,43 +320,97 @@ mod tests {
 
     #[test]
     fn road_walk_keeps_residential() {
-        let tags = vec![("highway".to_string(), "residential".to_string())];
+        let tags = tags(&[("highway", "residential")]);
         assert!(way_passes_road_filter(&tags, NetworkType::Walk));
     }
 
     #[test]
     fn road_walk_rejects_motorway() {
-        let tags = vec![("highway".to_string(), "motorway".to_string())];
+        let tags = tags(&[("highway", "motorway")]);
         assert!(!way_passes_road_filter(&tags, NetworkType::Walk));
     }
 
     #[test]
     fn road_drive_rejects_footway() {
-        let tags = vec![("highway".to_string(), "footway".to_string())];
+        let tags = tags(&[("highway", "footway")]);
         assert!(!way_passes_road_filter(&tags, NetworkType::Drive));
     }
 
     #[test]
     fn road_rejects_area_yes() {
-        let tags = vec![
-            ("highway".to_string(), "residential".to_string()),
-            ("area".to_string(), "yes".to_string()),
-        ];
+        let tags = tags(&[("highway", "residential"), ("area", "yes")]);
         assert!(!way_passes_road_filter(&tags, NetworkType::Walk));
     }
 
     #[test]
     fn road_walk_rejects_foot_no() {
-        let tags = vec![
-            ("highway".to_string(), "residential".to_string()),
-            ("foot".to_string(), "no".to_string()),
-        ];
+        let tags = tags(&[("highway", "residential"), ("foot", "no")]);
         assert!(!way_passes_road_filter(&tags, NetworkType::Walk));
     }
 
     #[test]
     fn road_no_highway_tag_rejected() {
-        let tags = vec![("name".to_string(), "Some Street".to_string())];
+        let tags = tags(&[("name", "Some Street")]);
         assert!(!way_passes_road_filter(&tags, NetworkType::Drive));
+    }
+
+    #[test]
+    fn road_drive_rejects_motor_vehicle_no() {
+        let tags = tags(&[("highway", "primary"), ("motor_vehicle", "no")]);
+        assert!(!way_passes_road_filter(&tags, NetworkType::Drive));
+    }
+
+    #[test]
+    fn road_drive_rejects_motorcar_no() {
+        let tags = tags(&[("highway", "primary"), ("motorcar", "no")]);
+        assert!(!way_passes_road_filter(&tags, NetworkType::Drive));
+    }
+
+    #[test]
+    fn road_drive_service_keeps_service_driveway_but_drive_rejects_it() {
+        let tags = tags(&[("highway", "service"), ("service", "driveway")]);
+
+        assert!(!way_passes_road_filter(&tags, NetworkType::Drive));
+        assert!(way_passes_road_filter(&tags, NetworkType::DriveService));
+    }
+
+    #[test]
+    fn road_drive_service_rejects_parking_aisle() {
+        let tags = tags(&[("highway", "service"), ("service", "parking_aisle")]);
+        assert!(!way_passes_road_filter(&tags, NetworkType::DriveService));
+    }
+
+    #[test]
+    fn road_walk_accepts_foot_designated() {
+        let tags = tags(&[("highway", "path"), ("foot", "designated")]);
+        assert!(way_passes_road_filter(&tags, NetworkType::Walk));
+    }
+
+    #[test]
+    fn road_bike_accepts_bicycle_designated() {
+        let tags = tags(&[("highway", "path"), ("bicycle", "designated")]);
+        assert!(way_passes_road_filter(&tags, NetworkType::Bike));
+    }
+
+    #[test]
+    fn road_bike_rejects_bicycle_no() {
+        let tags = tags(&[("highway", "residential"), ("bicycle", "no")]);
+        assert!(!way_passes_road_filter(&tags, NetworkType::Bike));
+    }
+
+    #[test]
+    fn road_drive_rejects_track_but_all_keeps_it() {
+        let tags = tags(&[("highway", "track")]);
+
+        assert!(!way_passes_road_filter(&tags, NetworkType::Drive));
+        assert!(way_passes_road_filter(&tags, NetworkType::All));
+    }
+
+    #[test]
+    fn road_all_private_keeps_private_service() {
+        let tags = tags(&[("highway", "service"), ("service", "private")]);
+
+        assert!(!way_passes_road_filter(&tags, NetworkType::All));
+        assert!(way_passes_road_filter(&tags, NetworkType::AllPrivate));
     }
 }

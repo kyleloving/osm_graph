@@ -17,21 +17,22 @@ Graduated colour bands from a central point, rendered largest-first so smaller
 bands appear on top.
 
 ```python
-import json, graphways, folium
+import json, graphways as gw, folium
 
-lat, lon = graphways.geocode("Marienplatz, Munich, Germany")
-time_limits = [300, 600, 900, 1200, 1500, 1800]   # 5–30 min in 5-min steps
+lat, lon = gw.geocode("Marienplatz, Munich, Germany")
+time_limits = [300, 600, 900, 1200, 1500, 1800]   # 5-30 min in 5-min steps
 colors     = ["#2ecc71", "#27ae60", "#f1c40f", "#e67e22", "#e74c3c", "#c0392b"]
 labels     = [f"{t // 60} min walk" for t in time_limits]
 
-isos = graphways.calc_isochrones(lat, lon, time_limits, "Walk")
+graph = gw.SpatialGraph.from_place("Marienplatz, Munich, Germany", network="walk", max_dist=5_000)
+isos = graph.isochrone((lat, lon), minutes=[t / 60 for t in time_limits])
 
 m = folium.Map(location=[lat, lon], zoom_start=14, tiles="Cartodb Positron")
 folium.Marker(location=[lat, lon], tooltip="Marienplatz").add_to(m)
 
-for geojson_str, color, label in reversed(list(zip(isos, colors, labels))):
+for iso, color, label in reversed(list(zip(isos, colors, labels))):
     folium.GeoJson(
-        json.loads(geojson_str),
+        json.loads(iso.to_geojson()),
         name=label,
         style_function=lambda _, c=color: {
             "fillColor": c, "color": c, "weight": 1.5, "fillOpacity": 0.2,
@@ -51,17 +52,17 @@ Each road segment is coloured by midpoint travel time, from green (departure)
 to red (arrival), with a legend bar.
 
 ```python
-import json, graphways, folium, branca.colormap
+import json, graphways as gw, folium, branca.colormap
 
-origin = graphways.geocode("Marienplatz, Munich, Germany")
-dest   = graphways.geocode("English Garden, Munich, Germany")
+origin = gw.geocode("Marienplatz, Munich, Germany")
+dest   = gw.geocode("English Garden, Munich, Germany")
 
-route_str = graphways.calc_route(origin[0], origin[1], dest[0], dest[1], "Drive")
-route = json.loads(route_str)
-props  = route["properties"]
-coords = route["geometry"]["coordinates"]   # [lon, lat] per GeoJSON spec
-times  = props["cumulative_times_s"]
-total  = props["duration_s"]
+graph = gw.SpatialGraph.from_place("Marienplatz, Munich, Germany", network="drive", max_dist=10_000)
+route = graph.route(origin, dest)
+route_geojson = json.loads(route.to_geojson())
+coords = route_geojson["geometry"]["coordinates"]   # [lon, lat] per GeoJSON spec
+times  = route.cumulative_times_s
+total  = route.duration_s
 
 m = folium.Map(location=list(origin), zoom_start=14, tiles="Cartodb Positron")
 
@@ -92,26 +93,25 @@ m.save("route.html")
 Restaurants reachable within 10 minutes on foot, rendered as map markers.
 
 ```python
-import json, graphways, folium
+import json, graphways as gw, folium
 
-lat, lon = graphways.geocode("Marienplatz, Munich, Germany")
+lat, lon = gw.geocode("Marienplatz, Munich, Germany")
 
 # Build graph once, reuse for isochrone + POIs
-graph = graphways.build_graph(lat, lon, "Walk", max_dist=3_000)
+graph = gw.SpatialGraph.from_place("Marienplatz, Munich, Germany", network="walk", max_dist=3_000)
 isos  = graph.isochrone((lat, lon), minutes=[10])                     # 10-minute walk
-pois_str = graph.fetch_pois(isos[0])
-pois = json.loads(pois_str)
+pois = graph.fetch_pois(isos[0])
 
 m = folium.Map(location=[lat, lon], zoom_start=15, tiles="Cartodb Positron")
-folium.GeoJson(json.loads(isos[0]), style_function=lambda _: {
+folium.GeoJson(json.loads(isos[0].to_geojson()), style_function=lambda _: {
     "fillColor": "#3498db", "color": "#2980b9", "weight": 1.5, "fillOpacity": 0.15,
 }).add_to(m)
 
-for feature in pois["features"]:
-    tags = feature["properties"]
+for poi in pois.pois:
+    tags = poi.tags
     if tags.get("amenity") != "restaurant":
         continue
-    lon_p, lat_p = feature["geometry"]["coordinates"]
+    lat_p, lon_p = poi.lat, poi.lon
     name = tags.get("name", "Restaurant")
     cuisine = tags.get("cuisine", "")
     folium.Marker(
@@ -130,9 +130,9 @@ m.save("pois.html")
 Render the raw road network (simplified) as a thin line layer.
 
 ```python
-import json, graphways, folium
+import json, graphways as gw, folium
 
-graph = graphways.build_graph(48.137144, 11.575399, "Drive", max_dist=3_000)
+graph = gw.SpatialGraph.from_place("Marienplatz, Munich, Germany", network="drive", max_dist=3_000)
 edges = json.loads(graph.edges_geojson())
 
 m = folium.Map(location=[48.137, 11.575], zoom_start=14, tiles="Cartodb Positron")
@@ -155,7 +155,7 @@ m.save("network.html")
 Compute isochrones from several stops on the same network without re-fetching the graph.
 
 ```python
-import json, graphways, folium
+import json, graphways as gw, folium
 
 stops = {
     "Marienplatz":  (48.137144, 11.575399),
@@ -164,14 +164,14 @@ stops = {
 }
 
 # One graph fetch covers all three stops
-graph = graphways.build_graph(48.137, 11.575, "Walk", max_dist=5_000)
+graph = gw.SpatialGraph.from_place("Marienplatz, Munich, Germany", network="walk", max_dist=5_000)
 
 m = folium.Map(location=[48.137, 11.575], zoom_start=13, tiles="Cartodb Positron")
 
 for name, (lat, lon) in stops.items():
     isos = graph.isochrone((lat, lon), minutes=[10])
     folium.GeoJson(
-        json.loads(isos[0]),
+        json.loads(isos[0].to_geojson()),
         style_function=lambda _: {
             "fillColor": "#3498db", "color": "#2980b9",
             "weight": 1.5, "fillOpacity": 0.15,

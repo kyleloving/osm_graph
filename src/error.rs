@@ -7,6 +7,11 @@ pub enum OsmGraphError {
     NodeNotFound,
     OriginNodeNotFound,
     DestinationNodeNotFound,
+    SnapDistanceExceeded {
+        role: &'static str,
+        distance_m: f64,
+        max_distance_m: f64,
+    },
     PathNotFound,
     LockPoisoned,
     GeocodingFailed(String),
@@ -28,6 +33,15 @@ impl std::fmt::Display for OsmGraphError {
             OsmGraphError::DestinationNodeNotFound => {
                 write!(f, "No graph node found near the destination coordinates")
             }
+            OsmGraphError::SnapDistanceExceeded {
+                role,
+                distance_m,
+                max_distance_m,
+            } => write!(
+                f,
+                "{} snapped {:.1} m from the graph, exceeding max_snap_m {:.1}",
+                role, distance_m, max_distance_m
+            ),
             OsmGraphError::PathNotFound => write!(
                 f,
                 "No path found between the snapped origin and destination nodes"
@@ -74,6 +88,24 @@ impl From<std::io::Error> for OsmGraphError {
 #[cfg(feature = "extension-module")]
 impl From<OsmGraphError> for pyo3::PyErr {
     fn from(e: OsmGraphError) -> Self {
-        pyo3::exceptions::PyRuntimeError::new_err(e.to_string())
+        match e {
+            OsmGraphError::Network(_) => {
+                pyo3::exceptions::PyConnectionError::new_err(e.to_string())
+            }
+            OsmGraphError::Io(_) => pyo3::exceptions::PyOSError::new_err(e.to_string()),
+            OsmGraphError::XmlParse(_)
+            | OsmGraphError::InvalidInput(_)
+            | OsmGraphError::PbfError(_)
+            | OsmGraphError::EmptyGraph => pyo3::exceptions::PyValueError::new_err(e.to_string()),
+            OsmGraphError::NodeNotFound
+            | OsmGraphError::OriginNodeNotFound
+            | OsmGraphError::DestinationNodeNotFound
+            | OsmGraphError::SnapDistanceExceeded { .. }
+            | OsmGraphError::PathNotFound
+            | OsmGraphError::GeocodingFailed(_) => {
+                pyo3::exceptions::PyLookupError::new_err(e.to_string())
+            }
+            OsmGraphError::LockPoisoned => pyo3::exceptions::PyRuntimeError::new_err(e.to_string()),
+        }
     }
 }

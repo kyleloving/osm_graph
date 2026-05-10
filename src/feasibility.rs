@@ -1,4 +1,4 @@
-//! Two-sided feasibility: "which nodes can I visit between origin and destination
+//! Network-time prisms: "which nodes can I visit between origin and destination
 //! within a given time budget, and how much slack remains?"
 //!
 //! # Concept
@@ -113,6 +113,21 @@ impl std::fmt::Display for InfeasibleReason {
 }
 
 impl std::error::Error for InfeasibleReason {}
+
+/// Graph-shaped view for a two-ended, time-bounded query.
+///
+/// A `PrismGraph` represents the nodes that can be reached from an
+/// origin and can still reach a destination within the available travel-time
+/// budget. It keeps the original graph and the inbound, outbound, and slack
+/// labels, and only materializes an induced subgraph when a constrained
+/// operation needs one.
+#[derive(Clone)]
+pub struct PrismGraph {
+    /// Parent graph. The prism node set is stored in `result`.
+    pub graph: SpatialGraph,
+    pub result: FeasibilityResult,
+    pub network_type: NetworkType,
+}
 
 // ---------------------------------------------------------------------------
 // Core computation
@@ -281,29 +296,117 @@ pub fn build_feasibility_polygon(
 // SpatialGraph entry points
 // ---------------------------------------------------------------------------
 
-impl SpatialGraph {
-    /// Public API alias for two-sided reachability.
-    ///
-    /// A node is included when `origin -> node -> destination` fits within
-    /// `max_time` seconds. If callers need activity time or a safety buffer,
-    /// subtract those from the total window before calling.
-    pub fn reachable_between(
+fn prism_subgraph(sg: &SpatialGraph, result: &FeasibilityResult) -> SpatialGraph {
+    let mut subgraph = DiGraph::new();
+    let mut old_to_new = HashMap::new();
+
+    for &old_idx in result.feasible.keys() {
+        let new_idx = subgraph.add_node(sg.graph[old_idx].clone());
+        old_to_new.insert(old_idx, new_idx);
+    }
+
+    for edge in sg.graph.edge_references() {
+        let (Some(&source), Some(&target)) = (
+            old_to_new.get(&edge.source()),
+            old_to_new.get(&edge.target()),
+        ) else {
+            continue;
+        };
+        subgraph.add_edge(source, target, edge.weight().clone());
+    }
+
+    SpatialGraph::new(subgraph)
+}
+
+impl PrismGraph {
+    pub fn node_count(&self) -> usize {
+        self.result.feasible.len()
+    }
+
+    pub fn edge_count(&self) -> usize {
+        self.graph
+            .graph
+            .edge_references()
+            .filter(|edge| {
+                self.result.feasible.contains_key(&edge.source())
+                    && self.result.feasible.contains_key(&edge.target())
+            })
+            .count()
+    }
+
+    pub fn contains_node_id(&self, node_id: i64) -> bool {
+        self.result
+            .feasible
+            .keys()
+            .any(|&idx| self.graph.graph[idx].id == node_id)
+    }
+
+    pub fn slack_at_node_id(&self, node_id: i64) -> Option<f64> {
+        self.result
+            .feasible
+            .iter()
+            .find_map(|(&idx, node)| (self.graph.graph[idx].id == node_id).then_some(node.slack))
+    }
+
+    pub fn materialize(&self) -> SpatialGraph {
+        prism_subgraph(&self.graph, &self.result)
+    }
+
+    pub fn route(
         &self,
         origin_lat: f64,
         origin_lon: f64,
         dest_lat: f64,
         dest_lon: f64,
-        max_time: f64,
-        network_type: NetworkType,
-    ) -> Option<Result<FeasibilityResult, InfeasibleReason>> {
-        self.feasibility(
+    ) -> Result<crate::routing::Route, crate::error::OsmGraphError> {
+        self.materialize().route(
             origin_lat,
             origin_lon,
             dest_lat,
             dest_lon,
-            max_time,
-            network_type,
+            self.network_type,
         )
+    }
+
+    pub fn isochrones(
+        &self,
+        lat: f64,
+        lon: f64,
+        time_limits: Vec<f64>,
+    ) -> Option<Vec<geo::Polygon>> {
+        self.materialize()
+            .isochrones(lat, lon, time_limits, self.network_type)
+    }
+}
+
+impl SpatialGraph {
+    /// Return the network-time prism between two coordinates.
+    ///
+    /// The result is a lightweight graph view over every node `v` satisfying
+    /// `origin -> v -> destination <= available_time`, with each node labeled
+    /// by inbound time, outbound time, and slack.
+    pub fn prism(
+        &self,
+        origin_lat: f64,
+        origin_lon: f64,
+        dest_lat: f64,
+        dest_lon: f64,
+        available_time: f64,
+        network_type: NetworkType,
+    ) -> Option<Result<PrismGraph, InfeasibleReason>> {
+        let result = self.feasibility(
+            origin_lat,
+            origin_lon,
+            dest_lat,
+            dest_lon,
+            available_time,
+            network_type,
+        )?;
+        Some(result.map(|result| PrismGraph {
+            graph: self.clone(),
+            result,
+            network_type,
+        }))
     }
 
     /// Compute which nodes can be visited between two lat/lon points within
@@ -452,6 +555,26 @@ mod tests {
             .get(&dest)
             .expect("destination must be feasible");
         assert_eq!(d.outbound_time, 0.0, "destination outbound should be 0");
+    }
+
+    #[test]
+    fn prism_graph_view_exposes_induced_counts_and_slack_labels() {
+        let sg = SpatialGraph::new(linear_graph());
+        let prism = sg
+            .prism(0.0, 0.0, 0.003, 0.0, 10_000.0, NetworkType::Drive)
+            .expect("origin and destination should snap")
+            .expect("budget should be feasible");
+
+        assert_eq!(prism.node_count(), 4);
+        assert_eq!(prism.edge_count(), 6);
+        assert!(prism.contains_node_id(1));
+        assert!(prism.contains_node_id(4));
+        assert!(prism.slack_at_node_id(2).is_some());
+        assert_eq!(prism.graph.graph.node_count(), 4);
+        assert_eq!(
+            prism.materialize().graph.node_count(),
+            prism.result.feasible.len()
+        );
     }
 
     #[test]

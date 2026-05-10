@@ -140,6 +140,22 @@ mod tests {
         }
     }
 
+    fn make_profile_way(drive_travel_time: f64, walk_travel_time: f64, length: f64) -> XmlWay {
+        XmlWay {
+            id: 1,
+            nodes: vec![],
+            tags: vec![XmlTag {
+                key: "highway".into(),
+                value: "residential".into(),
+            }],
+            length,
+            speed_kph: 50.0,
+            walk_travel_time,
+            bike_travel_time: walk_travel_time,
+            drive_travel_time,
+        }
+    }
+
     fn linear_graph() -> SpatialGraph {
         // A → B → C along a straight line
         let mut g = DiGraph::new();
@@ -184,5 +200,82 @@ mod tests {
             "last cumulative time {last:.6} != duration {:.6}",
             r.duration_s
         );
+    }
+
+    #[test]
+    fn test_route_chooses_faster_path_not_fewer_edges() {
+        let mut g = DiGraph::new();
+        let a = g.add_node(make_node(1, 0.0, 0.0));
+        let b = g.add_node(make_node(2, 0.001, 0.0));
+        let c = g.add_node(make_node(3, 0.002, 0.0));
+        g.add_edge(a, c, make_way(100.0, 100.0));
+        g.add_edge(a, b, make_way(10.0, 50.0));
+        g.add_edge(b, c, make_way(10.0, 50.0));
+        let sg = SpatialGraph::new(g);
+
+        let route = route(&sg, 0.0, 0.0, 0.002, 0.0, NetworkType::Drive).unwrap();
+
+        assert_eq!(route.coordinates.len(), 3);
+        assert_eq!(route.duration_s, 20.0);
+        assert_eq!(route.distance_m, 100.0);
+    }
+
+    #[test]
+    fn test_route_oneway_succeeds_forward_and_fails_reverse() {
+        let sg = linear_graph();
+
+        let forward = route(&sg, 0.0, 0.0, 0.002, 0.0, NetworkType::Drive);
+        let reverse = route(&sg, 0.002, 0.0, 0.0, 0.0, NetworkType::Drive);
+
+        assert!(forward.is_ok());
+        assert!(matches!(reverse, Err(OsmGraphError::PathNotFound)));
+    }
+
+    #[test]
+    fn test_route_origin_equals_destination_is_zero_cost() {
+        let sg = linear_graph();
+
+        let route = route(&sg, 0.0, 0.0, 0.0, 0.0, NetworkType::Drive).unwrap();
+
+        assert_eq!(route.coordinates.len(), 1);
+        assert_eq!(route.duration_s, 0.0);
+        assert_eq!(route.distance_m, 0.0);
+        assert_eq!(route.cumulative_times_s, vec![0.0]);
+    }
+
+    #[test]
+    fn test_route_uses_network_specific_costs() {
+        let mut g = DiGraph::new();
+        let a = g.add_node(make_node(1, 0.0, 0.0));
+        let b = g.add_node(make_node(2, 0.001, 0.0));
+        let c = g.add_node(make_node(3, 0.002, 0.0));
+        g.add_edge(a, c, make_profile_way(10.0, 100.0, 100.0));
+        g.add_edge(a, b, make_profile_way(30.0, 5.0, 50.0));
+        g.add_edge(b, c, make_profile_way(30.0, 5.0, 50.0));
+        let sg = SpatialGraph::new(g);
+
+        let drive = route(&sg, 0.0, 0.0, 0.002, 0.0, NetworkType::Drive).unwrap();
+        let walk = route(&sg, 0.0, 0.0, 0.002, 0.0, NetworkType::Walk).unwrap();
+
+        assert_eq!(drive.coordinates.len(), 2);
+        assert_eq!(drive.duration_s, 10.0);
+        assert_eq!(walk.coordinates.len(), 3);
+        assert_eq!(walk.duration_s, 10.0);
+    }
+
+    #[test]
+    fn test_route_disconnected_components_return_path_not_found() {
+        let mut g = DiGraph::new();
+        let a = g.add_node(make_node(1, 0.0, 0.0));
+        let b = g.add_node(make_node(2, 0.001, 0.0));
+        let c = g.add_node(make_node(3, 1.0, 1.0));
+        let d = g.add_node(make_node(4, 1.001, 1.0));
+        g.add_edge(a, b, make_way(10.0, 100.0));
+        g.add_edge(c, d, make_way(10.0, 100.0));
+        let sg = SpatialGraph::new(g);
+
+        let result = route(&sg, 0.0, 0.0, 1.001, 1.0, NetworkType::Drive);
+
+        assert!(matches!(result, Err(OsmGraphError::PathNotFound)));
     }
 }

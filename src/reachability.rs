@@ -29,6 +29,19 @@ pub struct ReachabilityResult {
     pub distances: HashMap<NodeIndex, f64>,
 }
 
+/// A travel-time-labeled view of the graph reachable from an origin within a budget.
+///
+/// This is the graph-shaped public result for reachability. It keeps the
+/// original graph and the travel-time labels, and only materializes a physical
+/// induced subgraph when a constrained operation needs one.
+#[derive(Clone)]
+pub struct ReachableGraph {
+    /// Parent graph. The reachable set is stored in `result`.
+    pub graph: SpatialGraph,
+    pub result: ReachabilityResult,
+    pub network_type: NetworkType,
+}
+
 /// Edge context passed to a custom cost closure.
 ///
 /// The fields are always in the *original* graph orientation regardless of
@@ -95,6 +108,89 @@ pub fn compute_reachability(
     })
 }
 
+fn reachable_subgraph(sg: &SpatialGraph, result: &ReachabilityResult) -> SpatialGraph {
+    let mut subgraph = DiGraph::new();
+    let mut old_to_new = HashMap::new();
+
+    for &old_idx in result.distances.keys() {
+        let new_idx = subgraph.add_node(sg.graph[old_idx].clone());
+        old_to_new.insert(old_idx, new_idx);
+    }
+
+    for edge in sg.graph.edge_references() {
+        let (Some(&source), Some(&target)) = (
+            old_to_new.get(&edge.source()),
+            old_to_new.get(&edge.target()),
+        ) else {
+            continue;
+        };
+        subgraph.add_edge(source, target, edge.weight().clone());
+    }
+
+    SpatialGraph::new(subgraph)
+}
+
+impl ReachableGraph {
+    pub fn node_count(&self) -> usize {
+        self.result.distances.len()
+    }
+
+    pub fn edge_count(&self) -> usize {
+        self.graph
+            .graph
+            .edge_references()
+            .filter(|edge| {
+                self.result.distances.contains_key(&edge.source())
+                    && self.result.distances.contains_key(&edge.target())
+            })
+            .count()
+    }
+
+    pub fn contains_node_id(&self, node_id: i64) -> bool {
+        self.result
+            .distances
+            .keys()
+            .any(|&idx| self.graph.graph[idx].id == node_id)
+    }
+
+    pub fn travel_time_to_node_id(&self, node_id: i64) -> Option<f64> {
+        self.result
+            .distances
+            .iter()
+            .find_map(|(&idx, &time)| (self.graph.graph[idx].id == node_id).then_some(time))
+    }
+
+    pub fn materialize(&self) -> SpatialGraph {
+        reachable_subgraph(&self.graph, &self.result)
+    }
+
+    pub fn route(
+        &self,
+        origin_lat: f64,
+        origin_lon: f64,
+        dest_lat: f64,
+        dest_lon: f64,
+    ) -> Result<crate::routing::Route, crate::error::OsmGraphError> {
+        self.materialize().route(
+            origin_lat,
+            origin_lon,
+            dest_lat,
+            dest_lon,
+            self.network_type,
+        )
+    }
+
+    pub fn isochrones(
+        &self,
+        lat: f64,
+        lon: f64,
+        time_limits: Vec<f64>,
+    ) -> Option<Vec<geo::Polygon>> {
+        self.materialize()
+            .isochrones(lat, lon, time_limits, self.network_type)
+    }
+}
+
 impl SpatialGraph {
     /// Alias for [`SpatialGraph::reachability`] using the public API naming.
     ///
@@ -108,6 +204,24 @@ impl SpatialGraph {
         network_type: NetworkType,
     ) -> Option<ReachabilityResult> {
         self.reachability(lat, lon, max_time, network_type)
+    }
+
+    /// Return the graph-shaped reachability result: a lightweight view over
+    /// nodes reachable from `(lat, lon)` within `max_time`, plus travel-time
+    /// labels from the origin.
+    pub fn reachable_graph(
+        &self,
+        lat: f64,
+        lon: f64,
+        max_time: f64,
+        network_type: NetworkType,
+    ) -> Option<ReachableGraph> {
+        let result = self.reachability(lat, lon, max_time, network_type)?;
+        Some(ReachableGraph {
+            graph: self.clone(),
+            result,
+            network_type,
+        })
     }
 
     /// Return every node reachable from the nearest graph node to `(lat, lon)`
@@ -254,5 +368,26 @@ mod tests {
                 node
             );
         }
+    }
+
+    #[test]
+    fn reachable_graph_view_exposes_induced_counts_and_travel_times() {
+        let nodes = vec![node(1, 0.0, 0.0), node(2, 0.0, 0.001), node(3, 0.0, 0.002)];
+        let w = way(vec![1, 2, 3], vec![("highway", "residential")]);
+        let graph = SpatialGraph::new(create_graph(nodes, vec![w], true, false));
+
+        let reachable = graph
+            .reachable_graph(0.0, 0.0, 20.0, NetworkType::Drive)
+            .unwrap();
+
+        assert_eq!(reachable.node_count(), 2);
+        assert_eq!(reachable.edge_count(), 2);
+        assert!(reachable.contains_node_id(1));
+        assert!(reachable.contains_node_id(2));
+        assert!(!reachable.contains_node_id(3));
+        assert_eq!(reachable.travel_time_to_node_id(1), Some(0.0));
+        assert!(reachable.travel_time_to_node_id(2).unwrap() > 0.0);
+        assert_eq!(reachable.graph.graph.node_count(), 3);
+        assert_eq!(reachable.materialize().graph.node_count(), 2);
     }
 }

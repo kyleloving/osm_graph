@@ -434,6 +434,7 @@ pub fn latlon_to_node(graph: &DiGraph<XmlNode, XmlWay>, lat: f64, lon: f64) -> O
 #[cfg(test)]
 mod tests {
     use super::*;
+    use petgraph::visit::EdgeRef;
 
     fn make_node(id: i64, lat: f64, lon: f64) -> XmlNode {
         XmlNode {
@@ -464,6 +465,15 @@ mod tests {
             bike_travel_time: 0.0,
             drive_travel_time: 0.0,
         }
+    }
+
+    fn edge_id_pairs(graph: &DiGraph<XmlNode, XmlWay>) -> Vec<(i64, i64)> {
+        let mut pairs: Vec<(i64, i64)> = graph
+            .edge_references()
+            .map(|edge| (graph[edge.source()].id, graph[edge.target()].id))
+            .collect();
+        pairs.sort_unstable();
+        pairs
     }
 
     #[test]
@@ -532,6 +542,75 @@ mod tests {
     }
 
     #[test]
+    fn test_oneway_yes_points_in_way_order() {
+        let nodes = vec![make_node(1, 0.0, 0.0), make_node(2, 0.001, 0.0)];
+        let way = make_way_raw(
+            vec![1, 2],
+            vec![("highway", "residential"), ("oneway", "yes")],
+        );
+
+        let graph = create_graph(nodes, vec![way], true, false);
+
+        assert_eq!(edge_id_pairs(&graph), vec![(1, 2)]);
+    }
+
+    #[test]
+    fn test_oneway_reverse_points_against_way_order() {
+        for value in ["-1", "reverse"] {
+            let nodes = vec![make_node(1, 0.0, 0.0), make_node(2, 0.001, 0.0)];
+            let way = make_way_raw(
+                vec![1, 2],
+                vec![("highway", "residential"), ("oneway", value)],
+            );
+
+            let graph = create_graph(nodes, vec![way], true, false);
+
+            assert_eq!(edge_id_pairs(&graph), vec![(2, 1)], "oneway={value}");
+        }
+    }
+
+    #[test]
+    fn test_oneway_truthy_values_point_in_way_order() {
+        for value in ["true", "1"] {
+            let nodes = vec![make_node(1, 0.0, 0.0), make_node(2, 0.001, 0.0)];
+            let way = make_way_raw(
+                vec![1, 2],
+                vec![("highway", "residential"), ("oneway", value)],
+            );
+
+            let graph = create_graph(nodes, vec![way], true, false);
+
+            assert_eq!(edge_id_pairs(&graph), vec![(1, 2)], "oneway={value}");
+        }
+    }
+
+    #[test]
+    fn test_roundabout_is_oneway_forward() {
+        let nodes = vec![make_node(1, 0.0, 0.0), make_node(2, 0.001, 0.0)];
+        let way = make_way_raw(
+            vec![1, 2],
+            vec![("highway", "residential"), ("junction", "roundabout")],
+        );
+
+        let graph = create_graph(nodes, vec![way], true, false);
+
+        assert_eq!(edge_id_pairs(&graph), vec![(1, 2)]);
+    }
+
+    #[test]
+    fn test_bidirectional_profile_overrides_oneway() {
+        let nodes = vec![make_node(1, 0.0, 0.0), make_node(2, 0.001, 0.0)];
+        let way = make_way_raw(
+            vec![1, 2],
+            vec![("highway", "residential"), ("oneway", "yes")],
+        );
+
+        let graph = create_graph(nodes, vec![way], true, true);
+
+        assert_eq!(edge_id_pairs(&graph), vec![(1, 2), (2, 1)]);
+    }
+
+    #[test]
     fn test_bidirectional_produces_two_edges() {
         let nodes = vec![make_node(1, 0.0, 0.0), make_node(2, 0.001, 0.0)];
         let way = make_way_raw(vec![1, 2], vec![("highway", "residential")]);
@@ -566,5 +645,40 @@ mod tests {
         assert_eq!(snap.node_lat, 48.0);
         assert_eq!(snap.node_lon, 11.0);
         assert!(snap.distance_m > 0.0);
+    }
+
+    #[test]
+    fn test_parse_xml_minimal_osm_fixture() {
+        let xml = r#"
+            <osm version="0.6">
+              <node id="1" lat="48.0" lon="11.0" />
+              <node id="2" lat="48.001" lon="11.0">
+                <tag k="amenity" v="cafe" />
+              </node>
+              <way id="10">
+                <nd ref="1" />
+                <nd ref="2" />
+                <tag k="highway" v="residential" />
+                <tag k="name" v="Fixture Street" />
+              </way>
+            </osm>
+        "#;
+
+        let parsed = parse_xml(xml).unwrap();
+
+        assert_eq!(parsed.nodes.len(), 2);
+        assert_eq!(parsed.ways.len(), 1);
+        assert_eq!(parsed.ways[0].nodes.len(), 2);
+        assert!(parsed.ways[0]
+            .tags
+            .iter()
+            .any(|tag| tag.key == "highway" && tag.value == "residential"));
+        assert_eq!(parsed.nodes[1].tags[0].key, "amenity");
+    }
+
+    #[test]
+    fn test_parse_xml_malformed_input_errors() {
+        let err = parse_xml("<osm><node id=\"1\"></osm>").unwrap_err();
+        assert!(!err.to_string().is_empty());
     }
 }

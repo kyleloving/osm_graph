@@ -1,48 +1,30 @@
 # Quickstart
 
-## The two usage patterns
+## The core pattern
 
-### Stateless functions (simple, one-off queries)
-
-Call `calc_isochrones` or `calc_route` directly. Each call internally fetches
-and caches the graph, so the first call for an area is slow (network I/O) and
-subsequent calls are fast (cache hit).
+Graphways is centered on a reusable `SpatialGraph`. Build the graph once for an area, then run reachability, isochrone, route, and POI queries against that graph.
 
 ```python
-import graphways
+import graphways as gw
 
-# Geocode a place name
-lat, lon = graphways.geocode("Marienplatz, Munich, Germany")
+origin = (48.137144, 11.575399)
+destination = (48.154560, 11.530840)
 
-# Isochrones: 5, 10, 15, 20 minutes driving
-isos = graphways.calc_isochrones(lat, lon, [300, 600, 900, 1200], "Drive")
+graph = gw.SpatialGraph.from_place(
+    "Marienplatz, Munich, Germany",
+    network="drive",
+    max_dist=10_000,
+)
+print(graph)
 
-# Route between two points
-route = graphways.calc_route(lat, lon, 48.154560, 11.530840, "Drive")
+isos = graph.isochrone(origin, minutes=[5, 10, 15, 20])
+route = graph.route(origin, destination)
+pois = graph.fetch_pois(isos[-1])
 ```
 
-### Stateful Graph object (multiple queries over the same area)
-
-`build_graph` returns a `Graph` that you reuse for isochrones, routing, and POI
-lookups without re-loading data from the cache each time.
-
-```python
-import graphways
-
-graph = graphways.build_graph(48.137144, 11.575399, "Drive", max_dist=10_000)
-print(graph)  # Graph(nodes=6251, edges=15356, network_type=Drive)
-
-# Compute isochrones for multiple origin points using the same graph
-origins = [(48.137144, 11.575399), (48.154560, 11.530840)]
-for lat, lon in origins:
-    isos = graph.isochrone((lat, lon), minutes=[5, 10, 15])
-    pois = graph.fetch_pois(isos[-1])  # POIs within the largest isochrone
-```
-
-Prefer the `Graph` object whenever you make more than one query for the same area.
+Use `SpatialGraph.from_pbf(path, network="walk")` for local offline OSM PBF workflows, or `SpatialGraph.from_osm(xml, network="walk")` when you already have OSM XML.
 
 ---
-
 ## Working with GeoJSON output
 
 All results come back as GeoJSON strings. Parse them with the standard library:
@@ -77,12 +59,12 @@ for feature in pois_data["features"]:
 
 | Value | Includes |
 |-------|----------|
-| `"Drive"` | Public roads accessible to private cars; excludes service roads, driveways |
-| `"DriveService"` | Like `Drive` but includes service roads |
-| `"Walk"` | Footways, pedestrian paths, and shared roads where walking is permitted |
-| `"Bike"` | Cycleways and roads open to bicycles |
-| `"All"` | All highway types except private access |
-| `"AllPrivate"` | All highway types including private access |
+| `"drive"` | Public roads accessible to private cars; excludes service roads, driveways |
+| `"drive_service"` | Like `Drive` but includes service roads |
+| `"walk"` | Footways, pedestrian paths, and shared roads where walking is permitted |
+| `"bike"` | Cycleways and roads open to bicycles |
+| `"all"` | All highway types except private access |
+| `"all_private"` | All highway types including private access |
 
 ---
 
@@ -105,8 +87,8 @@ Overpass API (network) → disk XML → in-memory XML → in-memory graph
 Each level persists across process restarts (disk) or within a session (memory).
 
 ```python
-print(graphways.cache_dir())  # shows the disk cache location
-graphways.clear_cache()       # wipe all three levels
+print(gw.cache_dir())  # shows the disk cache location
+gw.clear_cache()       # wipe all three levels
 ```
 
-Set `graphways_CACHE_DIR` to override the default cache location.
+Set `OSM_GRAPH_CACHE_DIR` to override the default cache location.

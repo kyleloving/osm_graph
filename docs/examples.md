@@ -17,14 +17,14 @@ Graduated colour bands from a central point, rendered largest-first so smaller
 bands appear on top.
 
 ```python
-import json, graphways, folium
+import json, graphways as gw, folium
 
-lat, lon = graphways.geocode("Marienplatz, Munich, Germany")
+lat, lon = gw.geocode("Marienplatz, Munich, Germany")
 time_limits = [300, 600, 900, 1200, 1500, 1800]   # 5–30 min in 5-min steps
 colors     = ["#2ecc71", "#27ae60", "#f1c40f", "#e67e22", "#e74c3c", "#c0392b"]
 labels     = [f"{t // 60} min walk" for t in time_limits]
 
-isos = graphways.calc_isochrones(lat, lon, time_limits, "Walk")
+isos = graph.isochrone((lat, lon), minutes=[t / 60 for t in time_limits])
 
 m = folium.Map(location=[lat, lon], zoom_start=14, tiles="Cartodb Positron")
 folium.Marker(location=[lat, lon], tooltip="Marienplatz").add_to(m)
@@ -51,12 +51,12 @@ Each road segment is coloured by midpoint travel time, from green (departure)
 to red (arrival), with a legend bar.
 
 ```python
-import json, graphways, folium, branca.colormap
+import json, graphways as gw, folium, branca.colormap
 
-origin = graphways.geocode("Marienplatz, Munich, Germany")
-dest   = graphways.geocode("English Garden, Munich, Germany")
+origin = gw.geocode("Marienplatz, Munich, Germany")
+dest   = gw.geocode("English Garden, Munich, Germany")
 
-route_str = graphways.calc_route(origin[0], origin[1], dest[0], dest[1], "Drive")
+graph = gw.SpatialGraph.from_place("Marienplatz, Munich, Germany", network="drive", max_dist=10_000)`r`nroute_str = graph.route(origin, dest)
 route = json.loads(route_str)
 props  = route["properties"]
 coords = route["geometry"]["coordinates"]   # [lon, lat] per GeoJSON spec
@@ -92,12 +92,12 @@ m.save("route.html")
 Restaurants reachable within 10 minutes on foot, rendered as map markers.
 
 ```python
-import json, graphways, folium
+import json, graphways as gw, folium
 
-lat, lon = graphways.geocode("Marienplatz, Munich, Germany")
+lat, lon = gw.geocode("Marienplatz, Munich, Germany")
 
 # Build graph once, reuse for isochrone + POIs
-graph = graphways.build_graph(lat, lon, "Walk", max_dist=3_000)
+graph = gw.SpatialGraph.from_place("Marienplatz, Munich, Germany", network="walk", max_dist=3_000)
 isos  = graph.isochrone((lat, lon), minutes=[10])                     # 10-minute walk
 pois_str = graph.fetch_pois(isos[0])
 pois = json.loads(pois_str)
@@ -130,9 +130,9 @@ m.save("pois.html")
 Render the raw road network (simplified) as a thin line layer.
 
 ```python
-import json, graphways, folium
+import json, graphways as gw, folium
 
-graph = graphways.build_graph(48.137144, 11.575399, "Drive", max_dist=3_000)
+graph = gw.SpatialGraph.from_place("Marienplatz, Munich, Germany", network="drive", max_dist=3_000)
 edges = json.loads(graph.edges_geojson())
 
 m = folium.Map(location=[48.137, 11.575], zoom_start=14, tiles="Cartodb Positron")
@@ -155,7 +155,7 @@ m.save("network.html")
 Compute isochrones from several stops on the same network without re-fetching the graph.
 
 ```python
-import json, graphways, folium
+import json, graphways as gw, folium
 
 stops = {
     "Marienplatz":  (48.137144, 11.575399),
@@ -164,7 +164,7 @@ stops = {
 }
 
 # One graph fetch covers all three stops
-graph = graphways.build_graph(48.137, 11.575, "Walk", max_dist=5_000)
+graph = gw.SpatialGraph.from_place("Marienplatz, Munich, Germany", network="walk", max_dist=5_000)
 
 m = folium.Map(location=[48.137, 11.575], zoom_start=13, tiles="Cartodb Positron")
 

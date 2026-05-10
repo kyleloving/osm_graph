@@ -27,6 +27,8 @@ mod simplify;
 // ---------------------------------------------------------------------------
 
 #[cfg(feature = "extension-module")]
+use petgraph::visit::EdgeRef;
+#[cfg(feature = "extension-module")]
 use pyo3::prelude::*;
 #[cfg(feature = "extension-module")]
 use pyo3::types::{PyDict, PyList};
@@ -43,15 +45,17 @@ lazy_static::lazy_static! {
 
 #[cfg(feature = "extension-module")]
 fn parse_network_type(s: &str) -> PyResult<overpass::NetworkType> {
-    match s {
-        "Drive" => Ok(overpass::NetworkType::Drive),
-        "DriveService" => Ok(overpass::NetworkType::DriveService),
-        "Walk" => Ok(overpass::NetworkType::Walk),
-        "Bike" => Ok(overpass::NetworkType::Bike),
-        "All" => Ok(overpass::NetworkType::All),
-        "AllPrivate" => Ok(overpass::NetworkType::AllPrivate),
+    match s.trim().to_ascii_lowercase().as_str() {
+        "drive" => Ok(overpass::NetworkType::Drive),
+        "driveservice" | "drive_service" | "drive-service" => {
+            Ok(overpass::NetworkType::DriveService)
+        }
+        "walk" | "walking" => Ok(overpass::NetworkType::Walk),
+        "bike" | "biking" | "bicycle" => Ok(overpass::NetworkType::Bike),
+        "all" => Ok(overpass::NetworkType::All),
+        "allprivate" | "all_private" | "all-private" => Ok(overpass::NetworkType::AllPrivate),
         _ => Err(pyo3::exceptions::PyValueError::new_err(format!(
-            "Invalid network type '{}'. Expected: Drive, DriveService, Walk, Bike, All, AllPrivate",
+            "Invalid network '{}'. Expected one of: drive, drive_service, walk, bike, all, all_private",
             s
         ))),
     }
@@ -63,9 +67,8 @@ fn parse_network_type(s: &str) -> PyResult<overpass::NetworkType> {
 
 /// A road-network graph loaded from OpenStreetMap.
 ///
-/// Obtain one via `build_graph(...)` and reuse it for multiple queries over
-/// the same area — isochrones, routing, and POI lookups all share the same
-/// in-memory graph with no redundant fetches.
+/// Construct one with `SpatialGraph.from_place(...)`, `SpatialGraph.from_pbf(...)`,
+/// or `SpatialGraph.from_osm(...)`, then reuse it for queries over the same area.
 #[cfg(feature = "extension-module")]
 #[pyclass(name = "SpatialGraph")]
 struct PyGraph {
@@ -74,17 +77,19 @@ struct PyGraph {
 }
 
 #[cfg(feature = "extension-module")]
-#[pyclass(name = "Reachability")]
-struct PyReachability {
+#[pyclass(name = "ReachableGraph")]
+struct PyReachableGraph {
     sg: graph::SpatialGraph,
     result: reachability::ReachabilityResult,
+    network_type: overpass::NetworkType,
 }
 
 #[cfg(feature = "extension-module")]
-#[pyclass(name = "BetweenReachability")]
-struct PyBetweenReachability {
+#[pyclass(name = "PrismGraph")]
+struct PyPrismGraph {
     sg: graph::SpatialGraph,
     result: feasibility::FeasibilityResult,
+    network_type: overpass::NetworkType,
     max_time_s: f64,
     stop_time_s: f64,
     buffer_s: f64,
@@ -94,9 +99,9 @@ struct PyBetweenReachability {
 #[pymethods]
 impl PyGraph {
     #[staticmethod]
-    #[pyo3(signature = (path, network_type, retain_all = false))]
-    fn from_pbf(path: String, network_type: String, retain_all: bool) -> PyResult<Self> {
-        let nt = parse_network_type(&network_type)?;
+    #[pyo3(signature = (path, network, retain_all = false))]
+    fn from_pbf(path: String, network: String, retain_all: bool) -> PyResult<Self> {
+        let nt = parse_network_type(&network)?;
         let sg = graph::SpatialGraph::from_pbf(path, nt, Some(retain_all))?;
         Ok(Self {
             sg,
@@ -105,9 +110,9 @@ impl PyGraph {
     }
 
     #[staticmethod]
-    #[pyo3(signature = (xml, network_type, retain_all = false))]
-    fn from_osm(xml: String, network_type: String, retain_all: bool) -> PyResult<Self> {
-        let nt = parse_network_type(&network_type)?;
+    #[pyo3(signature = (xml, network, retain_all = false))]
+    fn from_osm(xml: String, network: String, retain_all: bool) -> PyResult<Self> {
+        let nt = parse_network_type(&network)?;
         let sg = graph::SpatialGraph::from_osm(&xml, nt, Some(retain_all))
             .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
         Ok(Self {
@@ -117,14 +122,14 @@ impl PyGraph {
     }
 
     #[staticmethod]
-    #[pyo3(signature = (place, network_type, max_dist = None, retain_all = false))]
+    #[pyo3(signature = (place, network, max_dist = None, retain_all = false))]
     fn from_place(
         place: String,
-        network_type: String,
+        network: String,
         max_dist: Option<f64>,
         retain_all: bool,
     ) -> PyResult<Self> {
-        let nt = parse_network_type(&network_type)?;
+        let nt = parse_network_type(&network)?;
         let (lat, lon) = TOKIO_RT.block_on(geocoding::geocode(&place))?;
         let (_, sg) = TOKIO_RT.block_on(isochrone::calculate_isochrones_from_point(
             lat,
@@ -224,44 +229,48 @@ impl PyGraph {
         Ok(poi::pois_to_geojson(&pois))
     }
 
-    fn reachable(&self, origin: (f64, f64), minutes: f64) -> PyResult<PyReachability> {
-        let result = self
+    fn reachable(&self, origin: (f64, f64), minutes: f64) -> PyResult<PyReachableGraph> {
+        let reachable = self
             .sg
-            .reachable_from(origin.0, origin.1, minutes * 60.0, self.network_type)
+            .reachable_graph(origin.0, origin.1, minutes * 60.0, self.network_type)
             .ok_or_else(|| {
                 pyo3::exceptions::PyValueError::new_err("No node found near the given coordinates")
             })?;
-        Ok(PyReachability {
-            sg: self.sg.clone(),
-            result,
+        Ok(PyReachableGraph {
+            sg: reachable.graph,
+            result: reachable.result,
+            network_type: self.network_type,
         })
     }
 
     #[pyo3(signature = (
         origin,
         destination,
-        max_time_s,
-        stop_time_s = 0.0,
-        buffer_s = 0.0,
+        max_minutes,
+        stop_minutes = 0.0,
+        buffer_minutes = 0.0,
     ))]
-    fn reachable_between(
+    fn prism(
         &self,
         origin: (f64, f64),
         destination: (f64, f64),
-        max_time_s: f64,
-        stop_time_s: f64,
-        buffer_s: f64,
-    ) -> PyResult<PyBetweenReachability> {
+        max_minutes: f64,
+        stop_minutes: f64,
+        buffer_minutes: f64,
+    ) -> PyResult<PyPrismGraph> {
+        let max_time_s = max_minutes * 60.0;
+        let stop_time_s = stop_minutes * 60.0;
+        let buffer_s = buffer_minutes * 60.0;
         let traversal_budget = max_time_s - stop_time_s - buffer_s;
         if !traversal_budget.is_finite() || traversal_budget < 0.0 {
             return Err(pyo3::exceptions::PyValueError::new_err(
-                "max_time_s must be at least stop_time_s + buffer_s",
+                "max_minutes must be at least stop_minutes + buffer_minutes",
             ));
         }
 
-        let result = self
+        let prism = self
             .sg
-            .reachable_between(
+            .prism(
                 origin.0,
                 origin.1,
                 destination.0,
@@ -276,9 +285,10 @@ impl PyGraph {
             })?
             .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
 
-        Ok(PyBetweenReachability {
-            sg: self.sg.clone(),
-            result,
+        Ok(PyPrismGraph {
+            sg: prism.graph,
+            result: prism.result,
+            network_type: self.network_type,
             max_time_s,
             stop_time_s,
             buffer_s,
@@ -365,14 +375,43 @@ impl PyGraph {
 
 #[cfg(feature = "extension-module")]
 #[pymethods]
-impl PyReachability {
+impl PyReachableGraph {
     #[getter]
     fn max_time_s(&self) -> f64 {
         self.result.max_cost
     }
 
     fn node_count(&self) -> usize {
-        self.result.distances.len()
+        self.sg.graph.node_count()
+    }
+
+    fn edge_count(&self) -> usize {
+        self.sg.graph.edge_count()
+    }
+
+    fn contains_node(&self, node_id: i64) -> bool {
+        self.result
+            .distances
+            .keys()
+            .any(|&idx| self.sg.graph[idx].id == node_id)
+    }
+
+    fn nearest_node(&self, lat: f64, lon: f64) -> PyResult<Option<(i64, f64, f64)>> {
+        Ok(self
+            .result
+            .distances
+            .keys()
+            .min_by(|&&a, &&b| {
+                let a_node = &self.sg.graph[a];
+                let b_node = &self.sg.graph[b];
+                utils::calculate_distance(lat, lon, a_node.lat, a_node.lon)
+                    .partial_cmp(&utils::calculate_distance(lat, lon, b_node.lat, b_node.lon))
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .map(|&idx| {
+                let n = &self.sg.graph[idx];
+                (n.id, n.lat, n.lon)
+            }))
     }
 
     fn travel_time_to_node_id(&self, node_id: i64) -> Option<f64> {
@@ -396,19 +435,191 @@ impl PyReachability {
         Ok(items)
     }
 
-    fn isochrones(&self, time_limits: Vec<f64>) -> PyResult<Vec<String>> {
-        let polygons =
-            isochrone::build_isochrone_polygons(&self.sg.graph, &self.result, &time_limits);
-        Ok(polygons
+    fn nodes_geojson(&self) -> String {
+        let features: Vec<geojson::Feature> = self
+            .result
+            .distances
+            .iter()
+            .map(|(&idx, &travel_time_s)| {
+                let node = &self.sg.graph[idx];
+                let geom = geojson::Geometry::new(geojson::Value::Point(vec![node.lon, node.lat]));
+                let mut props = geojson::JsonObject::new();
+                props.insert("node_id".into(), node.id.into());
+                props.insert("lat".into(), node.lat.into());
+                props.insert("lon".into(), node.lon.into());
+                props.insert("travel_time_s".into(), travel_time_s.into());
+                geojson::Feature {
+                    geometry: Some(geom),
+                    properties: Some(props),
+                    ..Default::default()
+                }
+            })
+            .collect();
+        geojson::GeoJson::FeatureCollection(geojson::FeatureCollection {
+            features,
+            bbox: None,
+            foreign_members: None,
+        })
+        .to_string()
+    }
+
+    fn edges_geojson(&self) -> String {
+        let features: Vec<geojson::Feature> = self
+            .sg
+            .graph
+            .edge_references()
+            .filter_map(|edge| {
+                let source_time = *self.result.distances.get(&edge.source())?;
+                let target_time = *self.result.distances.get(&edge.target())?;
+                let source = &self.sg.graph[edge.source()];
+                let target = &self.sg.graph[edge.target()];
+                let way = edge.weight();
+                let coords = vec![vec![source.lon, source.lat], vec![target.lon, target.lat]];
+                let geom = geojson::Geometry::new(geojson::Value::LineString(coords));
+                let highway = way
+                    .tags
+                    .iter()
+                    .find(|tag| tag.key == "highway")
+                    .map(|tag| tag.value.as_str())
+                    .unwrap_or("unknown")
+                    .to_string();
+                let mut props = geojson::JsonObject::new();
+                props.insert("source_node_id".into(), source.id.into());
+                props.insert("target_node_id".into(), target.id.into());
+                props.insert("source_time_s".into(), source_time.into());
+                props.insert("target_time_s".into(), target_time.into());
+                props.insert("highway".into(), highway.into());
+                props.insert("length_m".into(), way.length.into());
+                props.insert("speed_kph".into(), way.speed_kph.into());
+                props.insert("drive_time_s".into(), way.drive_travel_time.into());
+                props.insert("walk_time_s".into(), way.walk_travel_time.into());
+                props.insert("bike_time_s".into(), way.bike_travel_time.into());
+                Some(geojson::Feature {
+                    geometry: Some(geom),
+                    properties: Some(props),
+                    ..Default::default()
+                })
+            })
+            .collect();
+        geojson::GeoJson::FeatureCollection(geojson::FeatureCollection {
+            features,
+            bbox: None,
+            foreign_members: None,
+        })
+        .to_string()
+    }
+
+    fn to_geojson(&self) -> String {
+        let node_features: Vec<geojson::Feature> = self
+            .result
+            .distances
+            .iter()
+            .map(|(&idx, &travel_time_s)| {
+                let node = &self.sg.graph[idx];
+                let geom = geojson::Geometry::new(geojson::Value::Point(vec![node.lon, node.lat]));
+                let mut props = geojson::JsonObject::new();
+                props.insert("kind".into(), "node".into());
+                props.insert("node_id".into(), node.id.into());
+                props.insert("travel_time_s".into(), travel_time_s.into());
+                geojson::Feature {
+                    geometry: Some(geom),
+                    properties: Some(props),
+                    ..Default::default()
+                }
+            })
+            .collect();
+
+        let edge_features = self.sg.graph.edge_references().filter_map(|edge| {
+            let source_time = *self.result.distances.get(&edge.source())?;
+            let target_time = *self.result.distances.get(&edge.target())?;
+            let source = &self.sg.graph[edge.source()];
+            let target = &self.sg.graph[edge.target()];
+            let way = edge.weight();
+            let coords = vec![vec![source.lon, source.lat], vec![target.lon, target.lat]];
+            let geom = geojson::Geometry::new(geojson::Value::LineString(coords));
+            let mut props = geojson::JsonObject::new();
+            props.insert("kind".into(), "edge".into());
+            props.insert("source_node_id".into(), source.id.into());
+            props.insert("target_node_id".into(), target.id.into());
+            props.insert("source_time_s".into(), source_time.into());
+            props.insert("target_time_s".into(), target_time.into());
+            props.insert("length_m".into(), way.length.into());
+            Some(geojson::Feature {
+                geometry: Some(geom),
+                properties: Some(props),
+                ..Default::default()
+            })
+        });
+
+        let features = node_features.into_iter().chain(edge_features).collect();
+        geojson::GeoJson::FeatureCollection(geojson::FeatureCollection {
+            features,
+            bbox: None,
+            foreign_members: None,
+        })
+        .to_string()
+    }
+
+    fn isochrone(&self, origin: (f64, f64), minutes: Vec<f64>) -> PyResult<Vec<String>> {
+        let time_limits = minutes.into_iter().map(|m| m * 60.0).collect();
+        let subgraph = reachability::ReachableGraph {
+            graph: self.sg.clone(),
+            result: self.result.clone(),
+            network_type: self.network_type,
+        }
+        .materialize();
+        let isos = subgraph
+            .isochrones(origin.0, origin.1, time_limits, self.network_type)
+            .ok_or_else(|| {
+                pyo3::exceptions::PyValueError::new_err("No node found near the given coordinates")
+            })?;
+        Ok(isos
             .iter()
             .map(|p| utils::polygon_to_geojson_string(p))
             .collect())
     }
 
+    fn route(&self, origin: (f64, f64), destination: (f64, f64)) -> PyResult<String> {
+        let subgraph = reachability::ReachableGraph {
+            graph: self.sg.clone(),
+            result: self.result.clone(),
+            network_type: self.network_type,
+        }
+        .materialize();
+        let r = subgraph.route(
+            origin.0,
+            origin.1,
+            destination.0,
+            destination.1,
+            self.network_type,
+        )?;
+
+        let coords: Vec<Vec<f64>> = r
+            .coordinates
+            .iter()
+            .map(|(lat, lon)| vec![*lon, *lat])
+            .collect();
+        let geometry = geojson::Geometry::new(geojson::Value::LineString(coords));
+        let mut props = geojson::JsonObject::new();
+        props.insert("distance_m".into(), r.distance_m.into());
+        props.insert("duration_s".into(), r.duration_s.into());
+        props.insert(
+            "cumulative_times_s".into(),
+            geojson::JsonValue::Array(r.cumulative_times_s.iter().map(|&t| t.into()).collect()),
+        );
+        let feature = geojson::Feature {
+            geometry: Some(geometry),
+            properties: Some(props),
+            ..Default::default()
+        };
+        Ok(geojson::GeoJson::Feature(feature).to_string())
+    }
+
     fn __repr__(&self) -> String {
         format!(
-            "Reachability(nodes={}, max_time_s={:.0})",
-            self.result.distances.len(),
+            "ReachableGraph(nodes={}, edges={}, max_time_s={:.0})",
+            self.node_count(),
+            self.edge_count(),
             self.result.max_cost,
         )
     }
@@ -416,7 +627,7 @@ impl PyReachability {
 
 #[cfg(feature = "extension-module")]
 #[pymethods]
-impl PyBetweenReachability {
+impl PyPrismGraph {
     #[getter]
     fn max_time_s(&self) -> f64 {
         self.max_time_s
@@ -446,6 +657,42 @@ impl PyBetweenReachability {
         self.result.feasible.len()
     }
 
+    fn edge_count(&self) -> usize {
+        self.sg
+            .graph
+            .edge_references()
+            .filter(|edge| {
+                self.result.feasible.contains_key(&edge.source())
+                    && self.result.feasible.contains_key(&edge.target())
+            })
+            .count()
+    }
+
+    fn contains_node(&self, node_id: i64) -> bool {
+        self.result
+            .feasible
+            .keys()
+            .any(|&idx| self.sg.graph[idx].id == node_id)
+    }
+
+    fn nearest_node(&self, lat: f64, lon: f64) -> PyResult<Option<(i64, f64, f64)>> {
+        Ok(self
+            .result
+            .feasible
+            .keys()
+            .min_by(|&&a, &&b| {
+                let a_node = &self.sg.graph[a];
+                let b_node = &self.sg.graph[b];
+                utils::calculate_distance(lat, lon, a_node.lat, a_node.lon)
+                    .partial_cmp(&utils::calculate_distance(lat, lon, b_node.lat, b_node.lon))
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .map(|&idx| {
+                let n = &self.sg.graph[idx];
+                (n.id, n.lat, n.lon)
+            }))
+    }
+
     fn slack_at_node_id(&self, node_id: i64) -> Option<f64> {
         self.result
             .feasible
@@ -469,6 +716,135 @@ impl PyBetweenReachability {
         Ok(items)
     }
 
+    fn nodes_geojson(&self) -> String {
+        let features: Vec<geojson::Feature> = self
+            .result
+            .feasible
+            .iter()
+            .map(|(&idx, node_data)| {
+                let node = &self.sg.graph[idx];
+                let geom = geojson::Geometry::new(geojson::Value::Point(vec![node.lon, node.lat]));
+                let mut props = geojson::JsonObject::new();
+                props.insert("node_id".into(), node.id.into());
+                props.insert("lat".into(), node.lat.into());
+                props.insert("lon".into(), node.lon.into());
+                props.insert("inbound_time_s".into(), node_data.inbound_time.into());
+                props.insert("outbound_time_s".into(), node_data.outbound_time.into());
+                props.insert("slack_s".into(), node_data.slack.into());
+                geojson::Feature {
+                    geometry: Some(geom),
+                    properties: Some(props),
+                    ..Default::default()
+                }
+            })
+            .collect();
+        geojson::GeoJson::FeatureCollection(geojson::FeatureCollection {
+            features,
+            bbox: None,
+            foreign_members: None,
+        })
+        .to_string()
+    }
+
+    fn edges_geojson(&self) -> String {
+        let features: Vec<geojson::Feature> = self
+            .sg
+            .graph
+            .edge_references()
+            .filter_map(|edge| {
+                let source_data = self.result.feasible.get(&edge.source())?;
+                let target_data = self.result.feasible.get(&edge.target())?;
+                let source = &self.sg.graph[edge.source()];
+                let target = &self.sg.graph[edge.target()];
+                let way = edge.weight();
+                let coords = vec![vec![source.lon, source.lat], vec![target.lon, target.lat]];
+                let geom = geojson::Geometry::new(geojson::Value::LineString(coords));
+                let highway = way
+                    .tags
+                    .iter()
+                    .find(|tag| tag.key == "highway")
+                    .map(|tag| tag.value.as_str())
+                    .unwrap_or("unknown")
+                    .to_string();
+                let mut props = geojson::JsonObject::new();
+                props.insert("source_node_id".into(), source.id.into());
+                props.insert("target_node_id".into(), target.id.into());
+                props.insert("source_slack_s".into(), source_data.slack.into());
+                props.insert("target_slack_s".into(), target_data.slack.into());
+                props.insert("highway".into(), highway.into());
+                props.insert("length_m".into(), way.length.into());
+                props.insert("speed_kph".into(), way.speed_kph.into());
+                props.insert("drive_time_s".into(), way.drive_travel_time.into());
+                props.insert("walk_time_s".into(), way.walk_travel_time.into());
+                props.insert("bike_time_s".into(), way.bike_travel_time.into());
+                Some(geojson::Feature {
+                    geometry: Some(geom),
+                    properties: Some(props),
+                    ..Default::default()
+                })
+            })
+            .collect();
+        geojson::GeoJson::FeatureCollection(geojson::FeatureCollection {
+            features,
+            bbox: None,
+            foreign_members: None,
+        })
+        .to_string()
+    }
+
+    fn to_geojson(&self) -> String {
+        let node_features: Vec<geojson::Feature> = self
+            .result
+            .feasible
+            .iter()
+            .map(|(&idx, node_data)| {
+                let node = &self.sg.graph[idx];
+                let geom = geojson::Geometry::new(geojson::Value::Point(vec![node.lon, node.lat]));
+                let mut props = geojson::JsonObject::new();
+                props.insert("kind".into(), "node".into());
+                props.insert("node_id".into(), node.id.into());
+                props.insert("inbound_time_s".into(), node_data.inbound_time.into());
+                props.insert("outbound_time_s".into(), node_data.outbound_time.into());
+                props.insert("slack_s".into(), node_data.slack.into());
+                geojson::Feature {
+                    geometry: Some(geom),
+                    properties: Some(props),
+                    ..Default::default()
+                }
+            })
+            .collect();
+
+        let edge_features = self.sg.graph.edge_references().filter_map(|edge| {
+            let source_data = self.result.feasible.get(&edge.source())?;
+            let target_data = self.result.feasible.get(&edge.target())?;
+            let source = &self.sg.graph[edge.source()];
+            let target = &self.sg.graph[edge.target()];
+            let way = edge.weight();
+            let coords = vec![vec![source.lon, source.lat], vec![target.lon, target.lat]];
+            let geom = geojson::Geometry::new(geojson::Value::LineString(coords));
+            let mut props = geojson::JsonObject::new();
+            props.insert("kind".into(), "edge".into());
+            props.insert("source_node_id".into(), source.id.into());
+            props.insert("target_node_id".into(), target.id.into());
+            props.insert("source_slack_s".into(), source_data.slack.into());
+            props.insert("target_slack_s".into(), target_data.slack.into());
+            props.insert("length_m".into(), way.length.into());
+            Some(geojson::Feature {
+                geometry: Some(geom),
+                properties: Some(props),
+                ..Default::default()
+            })
+        });
+
+        let features = node_features.into_iter().chain(edge_features).collect();
+        geojson::GeoJson::FeatureCollection(geojson::FeatureCollection {
+            features,
+            bbox: None,
+            foreign_members: None,
+        })
+        .to_string()
+    }
+
     #[pyo3(signature = (min_slack_s = 0.0))]
     fn slack_polygon(&self, min_slack_s: f64) -> PyResult<Option<String>> {
         Ok(
@@ -487,10 +863,66 @@ impl PyBetweenReachability {
             .collect())
     }
 
+    fn isochrone(&self, origin: (f64, f64), minutes: Vec<f64>) -> PyResult<Vec<String>> {
+        let time_limits = minutes.into_iter().map(|m| m * 60.0).collect();
+        let subgraph = feasibility::PrismGraph {
+            graph: self.sg.clone(),
+            result: self.result.clone(),
+            network_type: self.network_type,
+        }
+        .materialize();
+        let isos = subgraph
+            .isochrones(origin.0, origin.1, time_limits, self.network_type)
+            .ok_or_else(|| {
+                pyo3::exceptions::PyValueError::new_err("No node found near the given coordinates")
+            })?;
+        Ok(isos
+            .iter()
+            .map(|p| utils::polygon_to_geojson_string(p))
+            .collect())
+    }
+
+    fn route(&self, origin: (f64, f64), destination: (f64, f64)) -> PyResult<String> {
+        let subgraph = feasibility::PrismGraph {
+            graph: self.sg.clone(),
+            result: self.result.clone(),
+            network_type: self.network_type,
+        }
+        .materialize();
+        let r = subgraph.route(
+            origin.0,
+            origin.1,
+            destination.0,
+            destination.1,
+            self.network_type,
+        )?;
+
+        let coords: Vec<Vec<f64>> = r
+            .coordinates
+            .iter()
+            .map(|(lat, lon)| vec![*lon, *lat])
+            .collect();
+        let geometry = geojson::Geometry::new(geojson::Value::LineString(coords));
+        let mut props = geojson::JsonObject::new();
+        props.insert("distance_m".into(), r.distance_m.into());
+        props.insert("duration_s".into(), r.duration_s.into());
+        props.insert(
+            "cumulative_times_s".into(),
+            geojson::JsonValue::Array(r.cumulative_times_s.iter().map(|&t| t.into()).collect()),
+        );
+        let feature = geojson::Feature {
+            geometry: Some(geometry),
+            properties: Some(props),
+            ..Default::default()
+        };
+        Ok(geojson::GeoJson::Feature(feature).to_string())
+    }
+
     fn __repr__(&self) -> String {
         format!(
-            "BetweenReachability(nodes={}, direct_time_s={:.0}, max_time_s={:.0})",
-            self.result.feasible.len(),
+            "PrismGraph(nodes={}, edges={}, direct_time_s={:.0}, max_time_s={:.0})",
+            self.node_count(),
+            self.edge_count(),
             self.result.direct_time,
             self.max_time_s,
         )
@@ -500,110 +932,6 @@ impl PyBetweenReachability {
 // ---------------------------------------------------------------------------
 // Module-level Python functions
 // ---------------------------------------------------------------------------
-
-#[cfg(feature = "extension-module")]
-#[pyfunction]
-#[pyo3(signature = (lat, lon, network_type, max_dist = None, retain_all = false))]
-fn build_graph(
-    lat: f64,
-    lon: f64,
-    network_type: String,
-    max_dist: Option<f64>,
-    retain_all: bool,
-) -> PyResult<PyGraph> {
-    let nt = parse_network_type(&network_type)?;
-    let dist = max_dist.unwrap_or(5_000.0);
-    let (_, sg) = TOKIO_RT.block_on(isochrone::calculate_isochrones_from_point(
-        lat,
-        lon,
-        Some(dist),
-        vec![],
-        nt,
-        retain_all,
-    ))?;
-    Ok(PyGraph {
-        sg,
-        network_type: nt,
-    })
-}
-
-#[cfg(feature = "extension-module")]
-#[pyfunction]
-#[pyo3(signature = (lat, lon, time_limits, network_type, max_dist=None, retain_all=false))]
-fn calc_isochrones(
-    lat: f64,
-    lon: f64,
-    time_limits: Vec<f64>,
-    network_type: String,
-    max_dist: Option<f64>,
-    retain_all: bool,
-) -> PyResult<Vec<String>> {
-    let nt = parse_network_type(&network_type)?;
-    let (isos, _) = TOKIO_RT.block_on(isochrone::calculate_isochrones_from_point(
-        lat,
-        lon,
-        max_dist,
-        time_limits.clone(),
-        nt,
-        retain_all,
-    ))?;
-    Ok(isos
-        .iter()
-        .map(|iso| utils::polygon_to_geojson_string(iso))
-        .collect())
-}
-
-#[cfg(feature = "extension-module")]
-#[pyfunction]
-#[pyo3(signature = (origin_lat, origin_lon, dest_lat, dest_lon, network_type, max_dist=None, retain_all=false))]
-fn calc_route(
-    origin_lat: f64,
-    origin_lon: f64,
-    dest_lat: f64,
-    dest_lon: f64,
-    network_type: String,
-    max_dist: Option<f64>,
-    retain_all: bool,
-) -> PyResult<String> {
-    let nt = parse_network_type(&network_type)?;
-    let mid_lat = (origin_lat + dest_lat) / 2.0;
-    let mid_lon = (origin_lon + dest_lon) / 2.0;
-    let straight_line = utils::calculate_distance(origin_lat, origin_lon, dest_lat, dest_lon);
-    let computed_dist = max_dist.unwrap_or_else(|| (straight_line * 1.5).max(5_000.0));
-    let (_, sg) = TOKIO_RT.block_on(isochrone::calculate_isochrones_from_point(
-        mid_lat,
-        mid_lon,
-        Some(computed_dist),
-        vec![],
-        nt,
-        retain_all,
-    ))?;
-    let r = sg.route(origin_lat, origin_lon, dest_lat, dest_lon, nt)?;
-    let coords: Vec<Vec<f64>> = r
-        .coordinates
-        .iter()
-        .map(|(lat, lon)| vec![*lon, *lat])
-        .collect();
-    let geometry = geojson::Geometry::new(geojson::Value::LineString(coords));
-    let mut props = geojson::JsonObject::new();
-    props.insert("distance_m".to_string(), r.distance_m.into());
-    props.insert("duration_s".to_string(), r.duration_s.into());
-    props.insert(
-        "cumulative_times_s".to_string(),
-        geojson::JsonValue::Array(
-            r.cumulative_times_s
-                .iter()
-                .map(|&t| geojson::JsonValue::from(t))
-                .collect(),
-        ),
-    );
-    let feature = geojson::Feature {
-        geometry: Some(geometry),
-        properties: Some(props),
-        ..Default::default()
-    };
-    Ok(geojson::GeoJson::Feature(feature).to_string())
-}
 
 #[cfg(feature = "extension-module")]
 #[pyfunction]
@@ -637,12 +965,8 @@ fn cache_dir() -> PyResult<String> {
 #[pymodule]
 fn graphways(_py: Python, m: &PyModule) -> pyo3::PyResult<()> {
     m.add_class::<PyGraph>()?;
-    m.add_class::<PyReachability>()?;
-    m.add_class::<PyBetweenReachability>()?;
-    m.add("Graph", m.getattr("SpatialGraph")?)?;
-    m.add_function(wrap_pyfunction!(build_graph, m)?)?;
-    m.add_function(wrap_pyfunction!(calc_isochrones, m)?)?;
-    m.add_function(wrap_pyfunction!(calc_route, m)?)?;
+    m.add_class::<PyReachableGraph>()?;
+    m.add_class::<PyPrismGraph>()?;
     m.add_function(wrap_pyfunction!(geocode, m)?)?;
     m.add_function(wrap_pyfunction!(fetch_pois, m)?)?;
     m.add_function(wrap_pyfunction!(clear_cache, m)?)?;

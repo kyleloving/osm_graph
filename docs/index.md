@@ -24,10 +24,10 @@ All GeoJSON output. All cached. Typically 5–6× faster than osmnx for repeated
 ## 30-second start
 
 ```python
-import graphways
+import graphways as gw
 
-# Build the graph once — subsequent calls for the same area hit the cache
-graph = graphways.build_graph(48.137144, 11.575399, "Drive", max_dist=10_000)
+# Build the graph once; subsequent queries reuse the same in-memory network
+graph = gw.SpatialGraph.from_place("Marienplatz, Munich, Germany", network="drive", max_dist=10_000)
 
 # Isochrones from the same point
 isos = graph.isochrone((48.137144, 11.575399), minutes=[5, 10, 15, 20])
@@ -40,7 +40,6 @@ pois = graph.fetch_pois(isos[0])
 ```
 
 ---
-
 ## Features at a glance
 
 | Feature | Detail |

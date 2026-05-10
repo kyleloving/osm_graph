@@ -362,6 +362,11 @@ fn projected_ring_area(ring: &[ContourPoint]) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::graph::{XmlNode, XmlWay};
+    use crate::reachability::compute_reachability;
+    use geo::Area;
+    use petgraph::graph::DiGraph;
+    use std::sync::Arc;
 
     fn point(x: f64, y: f64) -> ContourPoint {
         ContourPoint {
@@ -396,6 +401,101 @@ mod tests {
         let ring = largest_closed_ring(&segments).expect("square should close");
         assert_eq!(ring.first(), ring.last());
         assert_eq!(ring.len(), 5);
+    }
+
+    fn make_node(id: i64, lat: f64, lon: f64) -> XmlNode {
+        XmlNode {
+            id,
+            lat,
+            lon,
+            tags: Vec::new(),
+        }
+    }
+
+    fn make_way(seconds: f64) -> XmlWay {
+        XmlWay {
+            id: 1,
+            nodes: Vec::new(),
+            tags: Vec::new(),
+            length: seconds,
+            speed_kph: 50.0,
+            walk_travel_time: seconds,
+            bike_travel_time: seconds,
+            drive_travel_time: seconds,
+        }
+    }
+
+    fn square_graph() -> (DiGraph<graph::XmlNode, graph::XmlWay>, NodeIndex) {
+        let mut graph = DiGraph::new();
+        let center = graph.add_node(make_node(0, 0.0, 0.0));
+        let north = graph.add_node(make_node(1, 0.001, 0.0));
+        let east = graph.add_node(make_node(2, 0.0, 0.001));
+        let south = graph.add_node(make_node(3, -0.001, 0.0));
+        let west = graph.add_node(make_node(4, 0.0, -0.001));
+        for node in [north, east, south, west] {
+            graph.add_edge(center, node, make_way(10.0));
+            graph.add_edge(node, center, make_way(10.0));
+        }
+        (graph, center)
+    }
+
+    #[test]
+    fn empty_reachability_returns_empty_polygons_in_input_order() {
+        let graph = DiGraph::new();
+        let result = ReachabilityResult {
+            start: NodeIndex::new(0),
+            max_cost: 0.0,
+            distances: HashMap::new(),
+        };
+
+        let polygons = build_isochrone_polygons(&graph, &result, &[60.0, 30.0]);
+
+        assert_eq!(polygons.len(), 2);
+        assert!(polygons
+            .iter()
+            .all(|polygon| polygon.exterior().0.is_empty()));
+    }
+
+    #[test]
+    fn fewer_than_three_reachable_nodes_returns_empty_polygon() {
+        let mut graph = DiGraph::new();
+        let a = graph.add_node(make_node(1, 0.0, 0.0));
+        let b = graph.add_node(make_node(2, 0.001, 0.0));
+        graph.add_edge(a, b, make_way(10.0));
+        let result = compute_reachability(&graph, a, 10.0, NetworkType::Drive);
+
+        let polygons = build_isochrone_polygons(&graph, &result, &[10.0]);
+
+        assert!(polygons[0].exterior().0.is_empty());
+    }
+
+    #[test]
+    fn isochrone_output_order_matches_input_limits() {
+        let (graph, start) = square_graph();
+
+        let polygons = calculate_isochrones_concurrently(
+            Arc::new(graph),
+            start,
+            vec![20.0, 5.0],
+            NetworkType::Drive,
+        );
+
+        assert_eq!(polygons.len(), 2);
+        assert!(polygons[0].unsigned_area() > polygons[1].unsigned_area());
+    }
+
+    #[test]
+    fn increasing_time_limits_have_non_decreasing_area() {
+        let (graph, start) = square_graph();
+
+        let polygons = calculate_isochrones_concurrently(
+            Arc::new(graph),
+            start,
+            vec![5.0, 20.0],
+            NetworkType::Drive,
+        );
+
+        assert!(polygons[0].unsigned_area() <= polygons[1].unsigned_area());
     }
 }
 

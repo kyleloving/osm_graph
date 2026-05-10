@@ -3,7 +3,7 @@ import time
 
 import branca.colormap
 import folium
-import graphways
+import graphways as gw
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -23,7 +23,7 @@ def isochrone_example():
     """Walking isochrones from Marienplatz with graduated colour by time band."""
     place = "Marienplatz, Munich, Germany"
     print(f"Geocoding '{place}'...")
-    lat, lon = graphways.geocode(place)
+    lat, lon = gw.geocode(place)
     print(f"  -> ({lat:.6f}, {lon:.6f})")
 
     time_limits = [300, 600, 900, 1200, 1500, 1800]  # 5–30 min in 5-min steps
@@ -31,7 +31,8 @@ def isochrone_example():
     labels = [f"{minutes(t)} walk" for t in time_limits]
 
     t0 = time.time()
-    isochrones = graphways.calc_isochrones(lat, lon, time_limits, "Walk")
+    graph = gw.SpatialGraph.from_place(place, network="walk", max_dist=5_000)
+    isochrones = graph.isochrone((lat, lon), minutes=[t / 60 for t in time_limits])
     print(f"  Computed {len(isochrones)} isochrones in {time.time() - t0:.2f}s")
 
     m = folium.Map(location=[lat, lon], zoom_start=14, tiles="Cartodb Positron")
@@ -62,19 +63,14 @@ def routing_example():
     dest_place = "English Garden, Munich, Germany"
 
     print("Geocoding origin and destination...")
-    origin = graphways.geocode(origin_place)
-    dest = graphways.geocode(dest_place)
+    origin = gw.geocode(origin_place)
+    dest = gw.geocode(dest_place)
     print(f"  Origin: {origin}")
     print(f"  Dest:   {dest}")
 
     t0 = time.time()
-    route_geojson = graphways.calc_route(
-        origin[0],
-        origin[1],
-        dest[0],
-        dest[1],
-        "Drive",
-    )
+    graph = gw.SpatialGraph.from_place(origin_place, network="drive", max_dist=10_000)
+    route_geojson = graph.route(origin, dest)
     elapsed = time.time() - t0
 
     route = json.loads(route_geojson)
@@ -144,15 +140,13 @@ def isochrone_and_route_example():
     dest_place = "Olympiapark, Munich, Germany"
 
     print("Geocoding...")
-    origin = graphways.geocode(origin_place)
-    dest = graphways.geocode(dest_place)
+    origin = gw.geocode(origin_place)
+    dest = gw.geocode(dest_place)
 
-    isochrones = graphways.calc_isochrones(
-        origin[0], origin[1], [300, 600, 900], "Walk"
-    )
-    route_geojson = graphways.calc_route(
-        origin[0], origin[1], dest[0], dest[1], "Drive"
-    )
+    walk_graph = gw.SpatialGraph.from_place(origin_place, network="walk", max_dist=5_000)
+    isochrones = walk_graph.isochrone(origin, minutes=[5, 10, 15])
+    drive_graph = gw.SpatialGraph.from_place(origin_place, network="drive", max_dist=10_000)
+    route_geojson = drive_graph.route(origin, dest)
     route = json.loads(route_geojson)
     props = route["properties"]
     coords = route["geometry"]["coordinates"]
@@ -218,7 +212,7 @@ def isochrone_and_route_example():
 
 def network_example():
 
-    graph = graphways.build_graph(48.137144, 11.575399, "Drive", max_dist=3_000)
+    graph = gw.SpatialGraph.from_place("Marienplatz, Munich, Germany", network="drive", max_dist=3_000)
     edges = json.loads(graph.edges_geojson())
 
     m = folium.Map(location=[48.137, 11.575], zoom_start=14, tiles="Cartodb Positron")

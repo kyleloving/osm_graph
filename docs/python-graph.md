@@ -1,15 +1,15 @@
-# Python API — `Graph`
+# Python API - `SpatialGraph`
 
-The `Graph` object wraps a loaded road-network graph and its spatial index.  
-Obtain one via [`build_graph`](python-api.md#build_graph).
+The `SpatialGraph` object wraps a loaded road-network graph and its spatial index.  
+Construct one with `gw.SpatialGraph.from_place(...)`, `from_pbf(...)`, or `from_osm(...)`.
 
-Reusing a `Graph` across multiple queries avoids redundant cache lookups and
+Reusing a `SpatialGraph` across multiple queries avoids redundant cache lookups and
 lets you run isochrones from many different origin points over the same network
 without re-fetching data.
 
 ```python
-graph = graphways.build_graph(48.137144, 11.575399, "Drive", max_dist=10_000)
-print(graph)  # Graph(nodes=6251, edges=15356, network_type=Drive)
+graph = gw.SpatialGraph.from_place("Marienplatz, Munich, Germany", network="drive", max_dist=10_000)
+print(graph)  # SpatialGraph(nodes=6251, edges=15356, network_type=Drive)
 ```
 
 ---
@@ -22,7 +22,7 @@ print(graph)  # Graph(nodes=6251, edges=15356, network_type=Drive)
 graph.node_count() -> int
 ```
 
-Number of nodes in the graph after simplification (unless `retain_all=True` was passed to `build_graph`).
+Number of nodes in the graph after simplification (unless `retain_all=True` was passed to the constructor).
 
 ---
 
@@ -132,6 +132,119 @@ print(f"Distance: {props['distance_m']:.0f} m")
 print(f"Duration: {props['duration_s'] / 60:.1f} min")
 print(f"Waypoints: {len(coords)}")
 ```
+
+---
+
+## Reachability
+
+### `reachable`
+
+```python
+graph.reachable(
+    origin: tuple[float, float],
+    minutes: float,
+) -> ReachableGraph
+```
+
+Return a travel-time-labeled view of the graph reachable from an origin.
+Inspection and GeoJSON export use the parent graph plus reachable-node labels,
+so they do not copy the road network. Constrained routing and isochrones
+materialize a bounded subgraph internally only when those methods are called.
+
+**Example**
+
+```python
+import json
+
+reachable = graph.reachable((48.137144, 11.575399), minutes=15)
+
+nodes = reachable.nodes()
+node_layer = json.loads(reachable.nodes_geojson())
+edge_layer = json.loads(reachable.edges_geojson())
+network_layer = json.loads(reachable.to_geojson())
+route = reachable.route((48.137144, 11.575399), (48.142, 11.58))
+isos = reachable.isochrone((48.137144, 11.575399), minutes=[5, 10, 15])
+```
+
+`ReachableGraph` methods:
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `node_count()` | `int` | Number of reachable nodes |
+| `edge_count()` | `int` | Number of reachable directed edges |
+| `nearest_node(lat, lon)` | `tuple | None` | Nearest node inside the reachable subgraph |
+| `contains_node(node_id)` | `bool` | Whether an OSM node id is reachable |
+| `travel_time_to_node_id(node_id)` | `float | None` | Travel time to an OSM node id |
+| `nodes()` | `list[dict]` | Reachable nodes with `node_id`, `lat`, `lon`, `travel_time_s` |
+| `nodes_geojson()` | `str` | Reachable nodes as GeoJSON points |
+| `edges_geojson()` | `str` | Edges whose source and target are both reachable |
+| `to_geojson()` | `str` | Reachable nodes and edges in one FeatureCollection |
+| `route(origin, destination)` | `str` | Route constrained to the reachable subgraph |
+| `isochrone(origin, minutes)` | `list[str]` | Isochrones constrained to the reachable subgraph |
+
+---
+
+## Network-Time Prisms
+
+### `prism`
+
+```python
+graph.prism(
+    origin: tuple[float, float],
+    destination: tuple[float, float],
+    max_minutes: float,
+    stop_minutes: float = 0.0,
+    buffer_minutes: float = 0.0,
+) -> PrismGraph
+```
+
+Return a graph view of possible stops between an origin and a destination within
+a fixed time window. A node is inside the prism when:
+
+```text
+origin -> node -> destination + stop_minutes + buffer_minutes <= max_minutes
+```
+
+This is useful for "what can I do on the way?" analysis without turning the
+library into a trip-planning or stop-order optimizer.
+
+Like `ReachableGraph`, `PrismGraph` is a lightweight view. It stores the parent
+graph plus inbound, outbound, and slack labels; constrained routes or isochrones
+materialize a bounded subgraph only when needed.
+
+**Example**
+
+```python
+prism = graph.prism(
+    origin=(48.137144, 11.575399),
+    destination=(48.154560, 11.530840),
+    max_minutes=45,
+    stop_minutes=10,
+    buffer_minutes=5,
+)
+
+nodes = prism.nodes()
+network_layer = prism.to_geojson()
+slack = prism.slack_polygon(min_slack_s=5 * 60)
+route = prism.route((48.137144, 11.575399), (48.142, 11.56))
+```
+
+`PrismGraph` methods:
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `node_count()` | `int` | Number of nodes inside the prism |
+| `edge_count()` | `int` | Number of directed edges inside the prism |
+| `nearest_node(lat, lon)` | `tuple | None` | Nearest node inside the prism graph |
+| `contains_node(node_id)` | `bool` | Whether an OSM node id is inside the prism |
+| `slack_at_node_id(node_id)` | `float | None` | Remaining slack for an OSM node id |
+| `nodes()` | `list[dict]` | Nodes with `node_id`, `lat`, `lon`, `inbound_time_s`, `outbound_time_s`, `slack_s` |
+| `nodes_geojson()` | `str` | Prism nodes as GeoJSON points |
+| `edges_geojson()` | `str` | Edges whose source and target are inside the prism |
+| `to_geojson()` | `str` | Prism nodes and edges in one FeatureCollection |
+| `slack_polygon(min_slack_s)` | `str | None` | Polygon enclosing nodes with at least the requested slack |
+| `route(origin, destination)` | `str` | Route constrained to the prism graph |
+| `isochrone(origin, minutes)` | `list[str]` | Isochrones constrained to the prism graph |
 
 ---
 

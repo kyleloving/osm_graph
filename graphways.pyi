@@ -10,18 +10,26 @@ from __future__ import annotations
 # Graph object
 # ---------------------------------------------------------------------------
 
-class Reachability:
+class ReachableGraph:
     """
-    One-sided reachability field produced by ``SpatialGraph.reachable_from``.
+    Travel-time-labeled graph view produced by ``SpatialGraph.reachable``.
 
-    Isochrones are display projections of this result; the traversal itself is
-    retained so callers can inspect nodes and timings without rebuilding the graph.
+    Cheap inspection methods operate on the parent graph plus reachable labels.
+    Constrained routing and isochrones materialize a bounded subgraph internally.
     """
 
     @property
     def max_time_s(self) -> float: ...
 
     def node_count(self) -> int: ...
+
+    def edge_count(self) -> int: ...
+
+    def contains_node(self, node_id: int) -> bool: ...
+
+    def nearest_node(
+        self, lat: float, lon: float
+    ) -> tuple[int, float, float] | None: ...
 
     def travel_time_to_node_id(self, node_id: int) -> float | None: ...
 
@@ -32,20 +40,52 @@ class Reachability:
         """
         ...
 
-    def isochrones(self, time_limits: list[float]) -> list[str]:
+    def nodes_geojson(self) -> str:
         """
-        Build one GeoJSON isochrone geometry per travel-time threshold.
+        Return reachable nodes as a GeoJSON ``FeatureCollection`` of points.
+        """
+        ...
+
+    def edges_geojson(self) -> str:
+        """
+        Return edges whose source and target nodes are both reachable.
+        """
+        ...
+
+    def to_geojson(self) -> str:
+        """
+        Return reachable nodes and edges in one GeoJSON ``FeatureCollection``.
+        """
+        ...
+
+    def isochrone(
+        self,
+        origin: tuple[float, float],
+        minutes: list[float],
+    ) -> list[str]:
+        """
+        Compute isochrones within this reachable subgraph.
+        """
+        ...
+
+    def route(
+        self,
+        origin: tuple[float, float],
+        destination: tuple[float, float],
+    ) -> str:
+        """
+        Find the fastest route constrained to this reachable subgraph.
         """
         ...
 
     def __repr__(self) -> str: ...
 
-class BetweenReachability:
+class PrismGraph:
     """
-    Two-sided reachability field produced by ``SpatialGraph.reachable_between``.
+    Network-time prism produced by ``SpatialGraph.prism``.
 
-    Nodes in this result satisfy ``origin -> node -> destination`` within the
-    traversal budget.
+    Cheap inspection methods operate on the parent graph plus prism labels.
+    Constrained routing and isochrones materialize a bounded subgraph internally.
     """
 
     @property
@@ -65,12 +105,38 @@ class BetweenReachability:
 
     def node_count(self) -> int: ...
 
+    def edge_count(self) -> int: ...
+
+    def contains_node(self, node_id: int) -> bool: ...
+
+    def nearest_node(
+        self, lat: float, lon: float
+    ) -> tuple[int, float, float] | None: ...
+
     def slack_at_node_id(self, node_id: int) -> float | None: ...
 
     def nodes(self) -> list[dict[str, float | int]]:
         """
         Return nodes with ``node_id``, ``lat``, ``lon``, ``inbound_time_s``,
         ``outbound_time_s``, and ``slack_s``.
+        """
+        ...
+
+    def nodes_geojson(self) -> str:
+        """
+        Return prism nodes as a GeoJSON ``FeatureCollection`` of points.
+        """
+        ...
+
+    def edges_geojson(self) -> str:
+        """
+        Return edges whose source and target nodes are both inside the prism.
+        """
+        ...
+
+    def to_geojson(self) -> str:
+        """
+        Return prism nodes and edges in one GeoJSON ``FeatureCollection``.
         """
         ...
 
@@ -86,14 +152,34 @@ class BetweenReachability:
         """
         ...
 
+    def isochrone(
+        self,
+        origin: tuple[float, float],
+        minutes: list[float],
+    ) -> list[str]:
+        """
+        Compute isochrones constrained to this prism subgraph.
+        """
+        ...
+
+    def route(
+        self,
+        origin: tuple[float, float],
+        destination: tuple[float, float],
+    ) -> str:
+        """
+        Find the fastest route constrained to this prism subgraph.
+        """
+        ...
+
     def __repr__(self) -> str: ...
 
 class SpatialGraph:
     """
     A road-network graph loaded from OpenStreetMap.
 
-    Obtain via :func:`build_graph`.  Reuse across multiple queries to avoid
-    redundant cache lookups.
+    Construct once with :meth:`from_place`, :meth:`from_pbf`, or :meth:`from_osm`.
+    Reuse across multiple queries to avoid redundant cache lookups.
 
     Attributes are read-only; all mutations happen inside Rust.
     """
@@ -101,43 +187,43 @@ class SpatialGraph:
     @staticmethod
     def from_pbf(
         path: str,
-        network_type: str,
+        network: str,
         retain_all: bool = False,
     ) -> SpatialGraph:
         """
         Load a local OSM PBF file into a reusable ``SpatialGraph``.
 
-        ``network_type`` accepts ``"Drive"``, ``"DriveService"``, ``"Walk"``,
-        ``"Bike"``, ``"All"``, or ``"AllPrivate"``.
+        ``network`` accepts ``"drive"``, ``"drive_service"``, ``"walk"``,
+        ``"bike"``, ``"all"``, or ``"all_private"``.
         """
         ...
 
     @staticmethod
     def from_osm(
         xml: str,
-        network_type: str,
+        network: str,
         retain_all: bool = False,
     ) -> SpatialGraph:
         """
         Parse an OSM XML string into a reusable ``SpatialGraph``.
 
-        ``network_type`` accepts ``"Drive"``, ``"DriveService"``, ``"Walk"``,
-        ``"Bike"``, ``"All"``, or ``"AllPrivate"``.
+        ``network`` accepts ``"drive"``, ``"drive_service"``, ``"walk"``,
+        ``"bike"``, ``"all"``, or ``"all_private"``.
         """
         ...
 
     @staticmethod
     def from_place(
         place: str,
-        network_type: str,
+        network: str,
         max_dist: float | None = None,
         retain_all: bool = False,
     ) -> SpatialGraph:
         """
         Geocode a place name and build a reusable ``SpatialGraph`` around it.
 
-        ``network_type`` accepts ``"Drive"``, ``"DriveService"``, ``"Walk"``,
-        ``"Bike"``, ``"All"``, or ``"AllPrivate"``.
+        ``network`` accepts ``"drive"``, ``"drive_service"``, ``"walk"``,
+        ``"bike"``, ``"all"``, or ``"all_private"``.
         """
         ...
 
@@ -210,7 +296,7 @@ class SpatialGraph:
         Parameters
         ----------
         isochrone_geojson:
-            A GeoJSON geometry string, e.g. from :meth:`isochrones`.
+            A GeoJSON geometry string, e.g. from :meth:`isochrone`.
 
         Returns
         -------
@@ -229,24 +315,24 @@ class SpatialGraph:
         """
         ...
 
-    def reachable(self, origin: tuple[float, float], minutes: float) -> Reachability:
+    def reachable(self, origin: tuple[float, float], minutes: float) -> ReachableGraph:
         """
-        Compute one-sided reachability from ``(lat, lon)`` within ``max_time_s``.
+        Compute one-sided reachability from ``(lat, lon)`` within ``minutes``.
         """
         ...
 
-    def reachable_between(
+    def prism(
         self,
         origin: tuple[float, float],
         destination: tuple[float, float],
-        max_time_s: float,
-        stop_time_s: float = 0.0,
-        buffer_s: float = 0.0,
-    ) -> BetweenReachability:
+        max_minutes: float,
+        stop_minutes: float = 0.0,
+        buffer_minutes: float = 0.0,
+    ) -> PrismGraph:
         """
-        Compute two-sided reachability for nodes that fit within:
+        Return the network-time prism for nodes that fit within:
 
-        ``origin -> node -> destination + stop_time_s + buffer_s <= max_time_s``.
+        ``origin -> node -> destination + stop_minutes + buffer_minutes <= max_minutes``.
         """
         ...
 
@@ -269,112 +355,9 @@ class SpatialGraph:
 
     def __repr__(self) -> str: ...
 
-Graph = SpatialGraph
-
 # ---------------------------------------------------------------------------
 # Module-level functions
 # ---------------------------------------------------------------------------
-
-def build_graph(
-    lat: float,
-    lon: float,
-    network_type: str,
-    max_dist: float | None = None,
-    retain_all: bool = False,
-) -> SpatialGraph:
-    """
-    Build and return a road-network :class:`SpatialGraph` for the area around ``(lat, lon)``.
-
-    The graph is cached — repeated calls for the same area and network type
-    return the in-memory graph with no network I/O.
-
-    Parameters
-    ----------
-    lat, lon:
-        Centre of the query area.
-    network_type:
-        ``"Drive"`` | ``"DriveService"`` | ``"Walk"`` | ``"Bike"`` |
-        ``"All"`` | ``"AllPrivate"``
-    max_dist:
-        Bounding-box radius in metres.  Default: 5 000 m.
-    retain_all:
-        Skip topological simplification.  Preserves every OSM node and edge;
-        slower for downstream computation.
-    """
-    ...
-
-def calc_isochrones(
-    lat: float,
-    lon: float,
-    time_limits: list[float],
-    network_type: str,
-    max_dist: float | None = None,
-    retain_all: bool = False,
-) -> list[str]:
-    """
-    Compute isochrones from a single origin point.
-
-    Parameters
-    ----------
-    lat, lon:
-        Origin coordinates.
-    time_limits:
-        Travel-time thresholds in **seconds**.
-    network_type:
-        ``"Drive"`` | ``"DriveService"`` | ``"Walk"`` | ``"Bike"`` |
-        ``"All"`` | ``"AllPrivate"``
-    max_dist:
-        Bounding-box radius in metres.  When ``None``, auto-sized from the
-        largest time limit.
-    retain_all:
-        Skip topological simplification.
-
-    Returns
-    -------
-    list[str]
-        One GeoJSON geometry string per time limit, in the same order as
-        ``time_limits``.
-    """
-    ...
-
-def calc_route(
-    origin_lat: float,
-    origin_lon: float,
-    dest_lat: float,
-    dest_lon: float,
-    network_type: str,
-    max_dist: float | None = None,
-    retain_all: bool = False,
-) -> str:
-    """
-    Find the fastest route between two coordinates using A*.
-
-    Parameters
-    ----------
-    origin_lat, origin_lon:
-        Origin coordinates.
-    dest_lat, dest_lon:
-        Destination coordinates.
-    network_type:
-        ``"Drive"`` | ``"DriveService"`` | ``"Walk"`` | ``"Bike"`` |
-        ``"All"`` | ``"AllPrivate"``
-    max_dist:
-        Bounding-box radius.  When ``None``, uses
-        ``max(5000, 1.5 × straight-line distance)``.
-    retain_all:
-        Skip topological simplification.
-
-    Returns
-    -------
-    str
-        GeoJSON ``Feature`` (LineString) with properties:
-
-        - ``distance_m`` (float) — total route distance in metres
-        - ``duration_s`` (float) — total travel time in seconds
-        - ``cumulative_times_s`` (list[float]) — elapsed time at each waypoint,
-          starting at ``0.0`` and ending at ``duration_s``
-    """
-    ...
 
 def geocode(place: str) -> tuple[float, float]:
     """
@@ -399,7 +382,7 @@ def fetch_pois(isochrone_geojson: str) -> str:
     Parameters
     ----------
     isochrone_geojson:
-        A GeoJSON geometry string, e.g. from :func:`calc_isochrones`.
+        A GeoJSON geometry string, e.g. from :meth:`SpatialGraph.isochrone`.
 
     Returns
     -------

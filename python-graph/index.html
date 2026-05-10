@@ -78,7 +78,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#python-api-graph" class="md-skip">
+        <a href="#python-api-spatialgraph" class="md-skip">
           Skip to content
         </a>
       
@@ -757,6 +757,62 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#reachability" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reachability
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Reachability">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#reachable" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        reachable
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#network-time-prisms" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Network-Time Prisms
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Network-Time Prisms">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prism" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        prism
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#points-of-interest" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1026,6 +1082,62 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#reachability" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reachability
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Reachability">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#reachable" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        reachable
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#network-time-prisms" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Network-Time Prisms
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Network-Time Prisms">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prism" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        prism
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#points-of-interest" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1112,21 +1224,21 @@
   
 
 
-<h1 id="python-api-graph">Python API — <code>Graph</code><a class="headerlink" href="#python-api-graph" title="Permanent link">&para;</a></h1>
-<p>The <code>Graph</code> object wraps a loaded road-network graph and its spatial index.<br />
-Obtain one via <a href="../python-api/#build_graph"><code>build_graph</code></a>.</p>
-<p>Reusing a <code>Graph</code> across multiple queries avoids redundant cache lookups and
-lets you run isochrones from many different origin points over the same network
-without re-fetching data.</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">graph</span> <span class="o">=</span> <span class="n">graphways</span><span class="o">.</span><span class="n">build_graph</span><span class="p">(</span><span class="mf">48.137144</span><span class="p">,</span> <span class="mf">11.575399</span><span class="p">,</span> <span class="s2">&quot;Drive&quot;</span><span class="p">,</span> <span class="n">max_dist</span><span class="o">=</span><span class="mi">10_000</span><span class="p">)</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nb">print</span><span class="p">(</span><span class="n">graph</span><span class="p">)</span>  <span class="c1"># Graph(nodes=6251, edges=15356, network_type=Drive)</span>
+<h1 id="python-api-spatialgraph">Python API - <code>SpatialGraph</code><a class="headerlink" href="#python-api-spatialgraph" title="Permanent link">&para;</a></h1>
+<p>The <code>SpatialGraph</code> object wraps a loaded road-network graph and its spatial index.<br />
+Construct one with <code>gw.SpatialGraph.from_place(...)</code>, <code>from_pbf(...)</code>, or <code>from_osm(...)</code>.</p>
+<p>Reusing a <code>SpatialGraph</code> across multiple queries avoids rebuilding the network
+and lets you run isochrones from many different origin points over the same
+loaded graph.</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">graph</span> <span class="o">=</span> <span class="n">gw</span><span class="o">.</span><span class="n">SpatialGraph</span><span class="o">.</span><span class="n">from_place</span><span class="p">(</span><span class="s2">&quot;Marienplatz, Munich, Germany&quot;</span><span class="p">,</span> <span class="n">network</span><span class="o">=</span><span class="s2">&quot;drive&quot;</span><span class="p">,</span> <span class="n">max_dist</span><span class="o">=</span><span class="mi">10_000</span><span class="p">)</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nb">print</span><span class="p">(</span><span class="n">graph</span><span class="p">)</span>  <span class="c1"># SpatialGraph(nodes=6251, edges=15356, network_type=Drive)</span>
 </span></code></pre></div>
 <hr />
 <h2 id="inspection">Inspection<a class="headerlink" href="#inspection" title="Permanent link">&para;</a></h2>
 <h3 id="node_count"><code>node_count</code><a class="headerlink" href="#node_count" title="Permanent link">&para;</a></h3>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">graph</span><span class="o">.</span><span class="n">node_count</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">int</span>
 </span></code></pre></div>
-<p>Number of nodes in the graph after simplification (unless <code>retain_all=True</code> was passed to <code>build_graph</code>).</p>
+<p>Number of nodes in the graph after simplification (unless <code>retain_all=True</code> was passed to the constructor).</p>
 <hr />
 <h3 id="edge_count"><code>edge_count</code><a class="headerlink" href="#edge_count" title="Permanent link">&para;</a></h3>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">graph</span><span class="o">.</span><span class="n">edge_count</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">int</span>
@@ -1137,7 +1249,7 @@ without re-fetching data.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">graph</span><span class="o">.</span><span class="n">nearest_node</span><span class="p">(</span><span class="n">lat</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">lon</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span>
 </span></code></pre></div>
 <p>Return <code>(osm_id, lat, lon)</code> for the graph node nearest to <code>(lat, lon)</code>.</p>
-<p>Uses the internal R-tree spatial index — O(log n) lookup regardless of graph size.</p>
+<p>Uses the internal R-tree spatial index -- O(log n) lookup regardless of graph size.</p>
 <p>Returns <code>None</code> if the graph is empty.</p>
 <p><strong>Example</strong></p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">osm_id</span><span class="p">,</span> <span class="n">node_lat</span><span class="p">,</span> <span class="n">node_lon</span> <span class="o">=</span> <span class="n">graph</span><span class="o">.</span><span class="n">nearest_node</span><span class="p">(</span><span class="mf">48.137144</span><span class="p">,</span> <span class="mf">11.575399</span><span class="p">)</span>
@@ -1147,8 +1259,10 @@ without re-fetching data.</p>
 <h2 id="isochrones">Isochrones<a class="headerlink" href="#isochrones" title="Permanent link">&para;</a></h2>
 <h3 id="isochrone"><code>isochrone</code><a class="headerlink" href="#isochrone" title="Permanent link">&para;</a></h3>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">graph</span><span class="o">.</span><span class="n">isochrone</span><span class="p">(</span>
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>    <span class="n">origin</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">],</span><span class="err">`</span><span class="n">r</span><span class="err">`</span><span class="n">n</span>    <span class="n">minutes</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">],</span>
-</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>    <span class="n">origin</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">],</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>    <span class="n">minutes</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">],</span>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>    <span class="n">max_snap_m</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="mf">100.0</span><span class="p">,</span>
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">IsochroneResult</span><span class="p">]</span>
 </span></code></pre></div>
 <p>Compute isochrones from an origin using the travel times of this graph's network type.</p>
 <p>One Dijkstra pass is run from the nearest graph node; one triangulated contour
@@ -1170,23 +1284,39 @@ polygon is computed per time limit.</p>
 <td>-</td>
 <td><code>(lat, lon)</code> origin</td>
 </tr>
+<tr>
+<td><code>minutes</code></td>
+<td><code>list[float]</code></td>
+<td>-</td>
+<td>Travel-time thresholds in minutes</td>
+</tr>
+<tr>
+<td><code>max_snap_m</code></td>
+<td><code>float</code> or <code>None</code></td>
+<td><code>100.0</code></td>
+<td>Reject the query if the origin snaps farther than this many meters from the graph; pass <code>None</code> to allow unlimited snapping</td>
+</tr>
 </tbody>
 </table>
-<p><strong>Returns</strong> <code>list[str]</code> — one GeoJSON geometry string per time limit, in the same order as <code>minutes</code></p>
+<p><strong>Returns</strong> <code>list[IsochroneResult]</code> - one structured polygon result per time
+limit, in the same order as <code>minutes</code>. Use <code>.to_geojson()</code> for mapping tools.</p>
 <p><strong>Example</strong></p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">isos</span> <span class="o">=</span> <span class="n">graph</span><span class="o">.</span><span class="n">isochrone</span><span class="p">((</span><span class="mf">48.137144</span><span class="p">,</span> <span class="mf">11.575399</span><span class="p">),</span> <span class="n">minutes</span><span class="o">=</span><span class="p">[</span><span class="mi">5</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">15</span><span class="p">,</span> <span class="mi">20</span><span class="p">])</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="n">first_geojson</span> <span class="o">=</span> <span class="n">isos</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">to_geojson</span><span class="p">()</span>
 </span></code></pre></div>
 <hr />
 <h2 id="routing">Routing<a class="headerlink" href="#routing" title="Permanent link">&para;</a></h2>
 <h3 id="route"><code>route</code><a class="headerlink" href="#route" title="Permanent link">&para;</a></h3>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="n">graph</span><span class="o">.</span><span class="n">route</span><span class="p">(</span>
-</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>    <span class="n">origin</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">],</span><span class="err">`</span><span class="n">r</span><span class="err">`</span><span class="n">n</span>    <span class="n">destination</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">],</span>
-</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span>
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>    <span class="n">origin</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">],</span>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>    <span class="n">destination</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">],</span>
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>    <span class="n">max_snap_m</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="mf">100.0</span><span class="p">,</span>
+</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">RouteResult</span>
 </span></code></pre></div>
 <p>Find the fastest route between two coordinates using A*.</p>
-<p>The network type (drive/walk/bike) is inherited from the <code>Graph</code> object.<br />
-If either origin or destination falls outside the graph's bounding box the
-nearest in-graph node is used as a proxy.</p>
+<p>The network type (drive/walk/bike) is inherited from the <code>SpatialGraph</code>.
+Coordinates snap to the nearest graph node. Pass <code>max_snap_m</code> to reject routes
+whose origin or destination is too far from the road network.</p>
 <p><strong>Parameters</strong></p>
 <table>
 <thead>
@@ -1202,9 +1332,19 @@ nearest in-graph node is used as a proxy.</p>
 <td><code>tuple[float, float]</code></td>
 <td><code>(lat, lon)</code> origin</td>
 </tr>
+<tr>
+<td><code>destination</code></td>
+<td><code>tuple[float, float]</code></td>
+<td><code>(lat, lon)</code> destination</td>
+</tr>
+<tr>
+<td><code>max_snap_m</code></td>
+<td><code>float</code> or <code>None</code></td>
+<td>Maximum snap distance for both endpoints; defaults to <code>100.0</code>, pass <code>None</code> to allow unlimited snapping</td>
+</tr>
 </tbody>
 </table>
-<p><strong>Returns</strong> <code>str</code> — GeoJSON <code>Feature</code> (LineString) with properties:</p>
+<p><strong>Returns</strong> <code>RouteResult</code> with properties:</p>
 <table>
 <thead>
 <tr>
@@ -1217,7 +1357,7 @@ nearest in-graph node is used as a proxy.</p>
 <tr>
 <td><code>distance_m</code></td>
 <td><code>float</code></td>
-<td>Total route distance in metres</td>
+<td>Total route distance in meters</td>
 </tr>
 <tr>
 <td><code>duration_s</code></td>
@@ -1229,28 +1369,237 @@ nearest in-graph node is used as a proxy.</p>
 <td><code>list[float]</code></td>
 <td>Elapsed travel time at each waypoint</td>
 </tr>
+<tr>
+<td><code>origin_snap</code></td>
+<td><code>SnapResult</code></td>
+<td>Snap diagnostics for the origin</td>
+</tr>
+<tr>
+<td><code>destination_snap</code></td>
+<td><code>SnapResult</code></td>
+<td>Snap diagnostics for the destination</td>
+</tr>
 </tbody>
 </table>
 <p><strong>Example</strong></p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="n">route</span> <span class="o">=</span> <span class="n">graph</span><span class="o">.</span><span class="n">route</span><span class="p">((</span><span class="mf">48.137144</span><span class="p">,</span> <span class="mf">11.575399</span><span class="p">),</span> <span class="p">(</span><span class="mf">48.154560</span><span class="p">,</span> <span class="mf">11.530840</span><span class="p">))</span>
 </span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>
-</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="n">route_str</span> <span class="o">=</span> <span class="n">graph</span><span class="o">.</span><span class="n">route</span><span class="p">((</span><span class="mf">48.137144</span><span class="p">,</span> <span class="mf">11.575399</span><span class="p">),</span> <span class="p">(</span><span class="mf">48.154560</span><span class="p">,</span> <span class="mf">11.530840</span><span class="p">))</span>
-</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="n">route</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">route_str</span><span class="p">)</span>
-</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="n">props</span> <span class="o">=</span> <span class="n">route</span><span class="p">[</span><span class="s2">&quot;properties&quot;</span><span class="p">]</span>
-</span><span id="__span-8-6"><a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="n">coords</span> <span class="o">=</span> <span class="n">route</span><span class="p">[</span><span class="s2">&quot;geometry&quot;</span><span class="p">][</span><span class="s2">&quot;coordinates&quot;</span><span class="p">]</span>  <span class="c1"># [[lon, lat], ...]</span>
-</span><span id="__span-8-7"><a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a>
-</span><span id="__span-8-8"><a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Distance: </span><span class="si">{</span><span class="n">props</span><span class="p">[</span><span class="s1">&#39;distance_m&#39;</span><span class="p">]</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2"> m&quot;</span><span class="p">)</span>
-</span><span id="__span-8-9"><a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Duration: </span><span class="si">{</span><span class="n">props</span><span class="p">[</span><span class="s1">&#39;duration_s&#39;</span><span class="p">]</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mi">60</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> min&quot;</span><span class="p">)</span>
-</span><span id="__span-8-10"><a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Waypoints: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">coords</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Distance: </span><span class="si">{</span><span class="n">route</span><span class="o">.</span><span class="n">distance_m</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2"> m&quot;</span><span class="p">)</span>
+</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Duration: </span><span class="si">{</span><span class="n">route</span><span class="o">.</span><span class="n">duration_s</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mi">60</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> min&quot;</span><span class="p">)</span>
+</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Waypoints: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">route</span><span class="o">.</span><span class="n">coordinates</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</span><span id="__span-8-6"><a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="n">route_geojson</span> <span class="o">=</span> <span class="n">route</span><span class="o">.</span><span class="n">to_geojson</span><span class="p">()</span>
 </span></code></pre></div>
+<hr />
+<h2 id="reachability">Reachability<a class="headerlink" href="#reachability" title="Permanent link">&para;</a></h2>
+<h3 id="reachable"><code>reachable</code><a class="headerlink" href="#reachable" title="Permanent link">&para;</a></h3>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="n">graph</span><span class="o">.</span><span class="n">reachable</span><span class="p">(</span>
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>    <span class="n">origin</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">],</span>
+</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>    <span class="n">minutes</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>    <span class="n">max_snap_m</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="mf">100.0</span><span class="p">,</span>
+</span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ReachableGraph</span>
+</span></code></pre></div>
+<p>Return a travel-time-labeled view of the graph reachable from an origin.
+Inspection and GeoJSON export use the parent graph plus reachable-node labels,
+so they do not copy the road network. Constrained routing and isochrones
+materialize a bounded subgraph internally only when those methods are called.
+Pass <code>max_snap_m</code> to reject origins that are too far from the graph.</p>
+<p><strong>Example</strong></p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>
+</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="n">reachable</span> <span class="o">=</span> <span class="n">graph</span><span class="o">.</span><span class="n">reachable</span><span class="p">((</span><span class="mf">48.137144</span><span class="p">,</span> <span class="mf">11.575399</span><span class="p">),</span> <span class="n">minutes</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
+</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>
+</span><span id="__span-10-5"><a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a><span class="n">nodes</span> <span class="o">=</span> <span class="n">reachable</span><span class="o">.</span><span class="n">nodes</span><span class="p">()</span>
+</span><span id="__span-10-6"><a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a><span class="n">node_layer</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">reachable</span><span class="o">.</span><span class="n">nodes_geojson</span><span class="p">())</span>
+</span><span id="__span-10-7"><a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a><span class="n">edge_layer</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">reachable</span><span class="o">.</span><span class="n">edges_geojson</span><span class="p">())</span>
+</span><span id="__span-10-8"><a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a><span class="n">network_layer</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">reachable</span><span class="o">.</span><span class="n">to_geojson</span><span class="p">())</span>
+</span><span id="__span-10-9"><a id="__codelineno-10-9" name="__codelineno-10-9" href="#__codelineno-10-9"></a><span class="n">route</span> <span class="o">=</span> <span class="n">reachable</span><span class="o">.</span><span class="n">route</span><span class="p">((</span><span class="mf">48.137144</span><span class="p">,</span> <span class="mf">11.575399</span><span class="p">),</span> <span class="p">(</span><span class="mf">48.142</span><span class="p">,</span> <span class="mf">11.58</span><span class="p">))</span>
+</span><span id="__span-10-10"><a id="__codelineno-10-10" name="__codelineno-10-10" href="#__codelineno-10-10"></a><span class="n">isos</span> <span class="o">=</span> <span class="n">reachable</span><span class="o">.</span><span class="n">isochrone</span><span class="p">((</span><span class="mf">48.137144</span><span class="p">,</span> <span class="mf">11.575399</span><span class="p">),</span> <span class="n">minutes</span><span class="o">=</span><span class="p">[</span><span class="mi">5</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">15</span><span class="p">])</span>
+</span></code></pre></div>
+<p><code>ReachableGraph</code> methods:</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Returns</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>node_count()</code></td>
+<td><code>int</code></td>
+<td>Number of reachable nodes</td>
+</tr>
+<tr>
+<td><code>edge_count()</code></td>
+<td><code>int</code></td>
+<td>Number of reachable directed edges</td>
+</tr>
+<tr>
+<td><code>nearest_node(lat, lon)</code></td>
+<td><code>tuple</code> or <code>None</code></td>
+<td>Nearest node inside the reachable subgraph</td>
+</tr>
+<tr>
+<td><code>contains_node(node_id)</code></td>
+<td><code>bool</code></td>
+<td>Whether an OSM node id is reachable</td>
+</tr>
+<tr>
+<td><code>travel_time_to_node_id(node_id)</code></td>
+<td><code>float</code> or <code>None</code></td>
+<td>Travel time to an OSM node id</td>
+</tr>
+<tr>
+<td><code>nodes()</code></td>
+<td><code>list[dict]</code></td>
+<td>Reachable nodes with <code>node_id</code>, <code>lat</code>, <code>lon</code>, <code>travel_time_s</code></td>
+</tr>
+<tr>
+<td><code>nodes_geojson()</code></td>
+<td><code>str</code></td>
+<td>Reachable nodes as GeoJSON points</td>
+</tr>
+<tr>
+<td><code>edges_geojson()</code></td>
+<td><code>str</code></td>
+<td>Edges whose source and target are both reachable</td>
+</tr>
+<tr>
+<td><code>to_geojson()</code></td>
+<td><code>str</code></td>
+<td>Reachable nodes and edges in one FeatureCollection</td>
+</tr>
+<tr>
+<td><code>route(origin, destination, max_snap_m=100.0)</code></td>
+<td><code>RouteResult</code></td>
+<td>Route constrained to the reachable subgraph</td>
+</tr>
+<tr>
+<td><code>isochrone(origin, minutes, max_snap_m=100.0)</code></td>
+<td><code>list[IsochroneResult]</code></td>
+<td>Isochrones constrained to the reachable subgraph</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="network-time-prisms">Network-Time Prisms<a class="headerlink" href="#network-time-prisms" title="Permanent link">&para;</a></h2>
+<h3 id="prism"><code>prism</code><a class="headerlink" href="#prism" title="Permanent link">&para;</a></h3>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="n">graph</span><span class="o">.</span><span class="n">prism</span><span class="p">(</span>
+</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>    <span class="n">origin</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">],</span>
+</span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>    <span class="n">destination</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">],</span>
+</span><span id="__span-11-4"><a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>    <span class="n">max_minutes</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+</span><span id="__span-11-5"><a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>    <span class="n">stop_minutes</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
+</span><span id="__span-11-6"><a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a>    <span class="n">buffer_minutes</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
+</span><span id="__span-11-7"><a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a>    <span class="n">max_snap_m</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="mf">100.0</span><span class="p">,</span>
+</span><span id="__span-11-8"><a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">PrismGraph</span>
+</span></code></pre></div>
+<p>Return a graph view of possible stops between an origin and a destination within
+a fixed time window. A node is inside the prism when:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>origin -&gt; node -&gt; destination + stop_minutes + buffer_minutes &lt;= max_minutes
+</span></code></pre></div>
+<p>This is useful for "what can I do on the way?" analysis without turning the
+library into a trip-planning or stop-order optimizer.
+Pass <code>max_snap_m</code> to reject origins or destinations that are too far from the
+graph.</p>
+<p>Like <code>ReachableGraph</code>, <code>PrismGraph</code> is a lightweight view. It stores the parent
+graph plus inbound, outbound, and slack labels; constrained routes or isochrones
+materialize a bounded subgraph only when needed.</p>
+<p><strong>Example</strong></p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="n">prism</span> <span class="o">=</span> <span class="n">graph</span><span class="o">.</span><span class="n">prism</span><span class="p">(</span>
+</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>    <span class="n">origin</span><span class="o">=</span><span class="p">(</span><span class="mf">48.137144</span><span class="p">,</span> <span class="mf">11.575399</span><span class="p">),</span>
+</span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>    <span class="n">destination</span><span class="o">=</span><span class="p">(</span><span class="mf">48.154560</span><span class="p">,</span> <span class="mf">11.530840</span><span class="p">),</span>
+</span><span id="__span-13-4"><a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a>    <span class="n">max_minutes</span><span class="o">=</span><span class="mi">45</span><span class="p">,</span>
+</span><span id="__span-13-5"><a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a>    <span class="n">stop_minutes</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+</span><span id="__span-13-6"><a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a>    <span class="n">buffer_minutes</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
+</span><span id="__span-13-7"><a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a><span class="p">)</span>
+</span><span id="__span-13-8"><a id="__codelineno-13-8" name="__codelineno-13-8" href="#__codelineno-13-8"></a>
+</span><span id="__span-13-9"><a id="__codelineno-13-9" name="__codelineno-13-9" href="#__codelineno-13-9"></a><span class="n">nodes</span> <span class="o">=</span> <span class="n">prism</span><span class="o">.</span><span class="n">nodes</span><span class="p">()</span>
+</span><span id="__span-13-10"><a id="__codelineno-13-10" name="__codelineno-13-10" href="#__codelineno-13-10"></a><span class="n">network_layer</span> <span class="o">=</span> <span class="n">prism</span><span class="o">.</span><span class="n">to_geojson</span><span class="p">()</span>
+</span><span id="__span-13-11"><a id="__codelineno-13-11" name="__codelineno-13-11" href="#__codelineno-13-11"></a><span class="n">slack</span> <span class="o">=</span> <span class="n">prism</span><span class="o">.</span><span class="n">slack_polygon</span><span class="p">(</span><span class="n">min_slack_s</span><span class="o">=</span><span class="mi">5</span> <span class="o">*</span> <span class="mi">60</span><span class="p">)</span>
+</span><span id="__span-13-12"><a id="__codelineno-13-12" name="__codelineno-13-12" href="#__codelineno-13-12"></a><span class="n">route</span> <span class="o">=</span> <span class="n">prism</span><span class="o">.</span><span class="n">route</span><span class="p">((</span><span class="mf">48.137144</span><span class="p">,</span> <span class="mf">11.575399</span><span class="p">),</span> <span class="p">(</span><span class="mf">48.142</span><span class="p">,</span> <span class="mf">11.56</span><span class="p">))</span>
+</span></code></pre></div>
+<p><code>PrismGraph</code> methods:</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Returns</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>node_count()</code></td>
+<td><code>int</code></td>
+<td>Number of nodes inside the prism</td>
+</tr>
+<tr>
+<td><code>edge_count()</code></td>
+<td><code>int</code></td>
+<td>Number of directed edges inside the prism</td>
+</tr>
+<tr>
+<td><code>nearest_node(lat, lon)</code></td>
+<td><code>tuple</code> or <code>None</code></td>
+<td>Nearest node inside the prism graph</td>
+</tr>
+<tr>
+<td><code>contains_node(node_id)</code></td>
+<td><code>bool</code></td>
+<td>Whether an OSM node id is inside the prism</td>
+</tr>
+<tr>
+<td><code>slack_at_node_id(node_id)</code></td>
+<td><code>float</code> or <code>None</code></td>
+<td>Remaining slack for an OSM node id</td>
+</tr>
+<tr>
+<td><code>nodes()</code></td>
+<td><code>list[dict]</code></td>
+<td>Nodes with <code>node_id</code>, <code>lat</code>, <code>lon</code>, <code>inbound_time_s</code>, <code>outbound_time_s</code>, <code>slack_s</code></td>
+</tr>
+<tr>
+<td><code>nodes_geojson()</code></td>
+<td><code>str</code></td>
+<td>Prism nodes as GeoJSON points</td>
+</tr>
+<tr>
+<td><code>edges_geojson()</code></td>
+<td><code>str</code></td>
+<td>Edges whose source and target are inside the prism</td>
+</tr>
+<tr>
+<td><code>to_geojson()</code></td>
+<td><code>str</code></td>
+<td>Prism nodes and edges in one FeatureCollection</td>
+</tr>
+<tr>
+<td><code>slack_polygon(min_slack_s)</code></td>
+<td><code>str</code> or <code>None</code></td>
+<td>Polygon enclosing nodes with at least the requested slack</td>
+</tr>
+<tr>
+<td><code>route(origin, destination, max_snap_m=100.0)</code></td>
+<td><code>RouteResult</code></td>
+<td>Route constrained to the prism graph</td>
+</tr>
+<tr>
+<td><code>isochrone(origin, minutes, max_snap_m=100.0)</code></td>
+<td><code>list[IsochroneResult]</code></td>
+<td>Isochrones constrained to the prism graph</td>
+</tr>
+</tbody>
+</table>
 <hr />
 <h2 id="points-of-interest">Points of interest<a class="headerlink" href="#points-of-interest" title="Permanent link">&para;</a></h2>
 <h3 id="fetch_pois"><code>fetch_pois</code><a class="headerlink" href="#fetch_pois" title="Permanent link">&para;</a></h3>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="n">graph</span><span class="o">.</span><span class="n">fetch_pois</span><span class="p">(</span><span class="n">isochrone_geojson</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="n">graph</span><span class="o">.</span><span class="n">fetch_pois</span><span class="p">(</span><span class="n">isochrone</span><span class="p">:</span> <span class="n">IsochroneResult</span> <span class="o">|</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">PoiCollection</span>
 </span></code></pre></div>
 <p>Fetch OSM points of interest that fall within a given isochrone polygon.</p>
-<p>Makes a fresh Overpass API request for the polygon's bounding box, then filters
-returned nodes to those geometrically inside the polygon.</p>
+<p>Queries Overpass for the polygon's bounding box, using the XML cache when
+available, then filters returned nodes to those geometrically inside the
+polygon.</p>
 <p><strong>Parameters</strong></p>
 <table>
 <thead>
@@ -1262,49 +1611,46 @@ returned nodes to those geometrically inside the polygon.</p>
 </thead>
 <tbody>
 <tr>
-<td><code>isochrone_geojson</code></td>
-<td><code>str</code></td>
-<td>A GeoJSON geometry string (typically from <code>graph.isochrone(...)</code>)</td>
+<td><code>isochrone</code></td>
+<td><code>IsochroneResult</code> or <code>str</code></td>
+<td>An isochrone result or a GeoJSON geometry string</td>
 </tr>
 </tbody>
 </table>
-<p><strong>Returns</strong> <code>str</code> — GeoJSON <code>FeatureCollection</code> where each <code>Feature</code> is a POI <code>Point</code>
-with raw OSM tags as properties.</p>
+<p><strong>Returns</strong> <code>PoiCollection</code> with structured <code>Poi</code> objects. Call <code>.to_geojson()</code>
+for a GeoJSON <code>FeatureCollection</code>.</p>
 <p><strong>Example</strong></p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
-</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>
-</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="n">isos</span> <span class="o">=</span> <span class="n">graph</span><span class="o">.</span><span class="n">isochrone</span><span class="p">((</span><span class="mf">48.137144</span><span class="p">,</span> <span class="mf">11.575399</span><span class="p">),</span> <span class="n">minutes</span><span class="o">=</span><span class="p">[</span><span class="mi">10</span><span class="p">])</span>
-</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="n">pois_str</span> <span class="o">=</span> <span class="n">graph</span><span class="o">.</span><span class="n">fetch_pois</span><span class="p">(</span><span class="n">isos</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
-</span><span id="__span-10-5"><a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a><span class="n">pois</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">pois_str</span><span class="p">)</span>
-</span><span id="__span-10-6"><a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a>
-</span><span id="__span-10-7"><a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a><span class="n">restaurants</span> <span class="o">=</span> <span class="p">[</span>
-</span><span id="__span-10-8"><a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a>    <span class="n">f</span><span class="p">[</span><span class="s2">&quot;properties&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">,</span> <span class="s2">&quot;?&quot;</span><span class="p">)</span>
-</span><span id="__span-10-9"><a id="__codelineno-10-9" name="__codelineno-10-9" href="#__codelineno-10-9"></a>    <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">pois</span><span class="p">[</span><span class="s2">&quot;features&quot;</span><span class="p">]</span>
-</span><span id="__span-10-10"><a id="__codelineno-10-10" name="__codelineno-10-10" href="#__codelineno-10-10"></a>    <span class="k">if</span> <span class="n">f</span><span class="p">[</span><span class="s2">&quot;properties&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;amenity&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="s2">&quot;restaurant&quot;</span>
-</span><span id="__span-10-11"><a id="__codelineno-10-11" name="__codelineno-10-11" href="#__codelineno-10-11"></a><span class="p">]</span>
-</span><span id="__span-10-12"><a id="__codelineno-10-12" name="__codelineno-10-12" href="#__codelineno-10-12"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Found </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">restaurants</span><span class="p">)</span><span class="si">}</span><span class="s2"> restaurants within 10 minutes&quot;</span><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="n">isos</span> <span class="o">=</span> <span class="n">graph</span><span class="o">.</span><span class="n">isochrone</span><span class="p">((</span><span class="mf">48.137144</span><span class="p">,</span> <span class="mf">11.575399</span><span class="p">),</span> <span class="n">minutes</span><span class="o">=</span><span class="p">[</span><span class="mi">10</span><span class="p">])</span>
+</span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a><span class="n">pois</span> <span class="o">=</span> <span class="n">graph</span><span class="o">.</span><span class="n">fetch_pois</span><span class="p">(</span><span class="n">isos</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+</span><span id="__span-15-3"><a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a>
+</span><span id="__span-15-4"><a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a><span class="n">restaurants</span> <span class="o">=</span> <span class="p">[</span>
+</span><span id="__span-15-5"><a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a>    <span class="n">poi</span><span class="o">.</span><span class="n">tags</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">,</span> <span class="s2">&quot;?&quot;</span><span class="p">)</span>
+</span><span id="__span-15-6"><a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a>    <span class="k">for</span> <span class="n">poi</span> <span class="ow">in</span> <span class="n">pois</span><span class="o">.</span><span class="n">pois</span>
+</span><span id="__span-15-7"><a id="__codelineno-15-7" name="__codelineno-15-7" href="#__codelineno-15-7"></a>    <span class="k">if</span> <span class="n">poi</span><span class="o">.</span><span class="n">tags</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;amenity&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="s2">&quot;restaurant&quot;</span>
+</span><span id="__span-15-8"><a id="__codelineno-15-8" name="__codelineno-15-8" href="#__codelineno-15-8"></a><span class="p">]</span>
+</span><span id="__span-15-9"><a id="__codelineno-15-9" name="__codelineno-15-9" href="#__codelineno-15-9"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Found </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">restaurants</span><span class="p">)</span><span class="si">}</span><span class="s2"> restaurants within 10 minutes&quot;</span><span class="p">)</span>
 </span></code></pre></div>
 <hr />
 <h2 id="visualisation">Visualisation<a class="headerlink" href="#visualisation" title="Permanent link">&para;</a></h2>
 <h3 id="nodes_geojson"><code>nodes_geojson</code><a class="headerlink" href="#nodes_geojson" title="Permanent link">&para;</a></h3>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="n">graph</span><span class="o">.</span><span class="n">nodes_geojson</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">str</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="n">graph</span><span class="o">.</span><span class="n">nodes_geojson</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">str</span>
 </span></code></pre></div>
 <p>Return all graph nodes as a GeoJSON <code>FeatureCollection</code> of <code>Point</code> features.</p>
 <p>Each feature has properties: <code>id</code> (OSM node id), <code>lat</code>, <code>lon</code>.</p>
 <p>Useful for visualising the network in mapping tools.</p>
 <p><strong>Example</strong></p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">folium</span><span class="o">,</span><span class="w"> </span><span class="nn">json</span>
-</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>
-</span><span id="__span-12-3"><a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="n">nodes</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">graph</span><span class="o">.</span><span class="n">nodes_geojson</span><span class="p">())</span>
-</span><span id="__span-12-4"><a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="n">m</span> <span class="o">=</span> <span class="n">folium</span><span class="o">.</span><span class="n">Map</span><span class="p">(</span><span class="n">location</span><span class="o">=</span><span class="p">[</span><span class="mf">48.137</span><span class="p">,</span> <span class="mf">11.575</span><span class="p">],</span> <span class="n">zoom_start</span><span class="o">=</span><span class="mi">13</span><span class="p">)</span>
-</span><span id="__span-12-5"><a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a><span class="k">for</span> <span class="n">feature</span> <span class="ow">in</span> <span class="n">nodes</span><span class="p">[</span><span class="s2">&quot;features&quot;</span><span class="p">]:</span>
-</span><span id="__span-12-6"><a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a>    <span class="n">lat</span> <span class="o">=</span> <span class="n">feature</span><span class="p">[</span><span class="s2">&quot;properties&quot;</span><span class="p">][</span><span class="s2">&quot;lat&quot;</span><span class="p">]</span>
-</span><span id="__span-12-7"><a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a>    <span class="n">lon</span> <span class="o">=</span> <span class="n">feature</span><span class="p">[</span><span class="s2">&quot;properties&quot;</span><span class="p">][</span><span class="s2">&quot;lon&quot;</span><span class="p">]</span>
-</span><span id="__span-12-8"><a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a>    <span class="n">folium</span><span class="o">.</span><span class="n">CircleMarker</span><span class="p">([</span><span class="n">lat</span><span class="p">,</span> <span class="n">lon</span><span class="p">],</span> <span class="n">radius</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">add_to</span><span class="p">(</span><span class="n">m</span><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-17-1"><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">folium</span><span class="o">,</span><span class="w"> </span><span class="nn">json</span>
+</span><span id="__span-17-2"><a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a>
+</span><span id="__span-17-3"><a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a><span class="n">nodes</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">graph</span><span class="o">.</span><span class="n">nodes_geojson</span><span class="p">())</span>
+</span><span id="__span-17-4"><a id="__codelineno-17-4" name="__codelineno-17-4" href="#__codelineno-17-4"></a><span class="n">m</span> <span class="o">=</span> <span class="n">folium</span><span class="o">.</span><span class="n">Map</span><span class="p">(</span><span class="n">location</span><span class="o">=</span><span class="p">[</span><span class="mf">48.137</span><span class="p">,</span> <span class="mf">11.575</span><span class="p">],</span> <span class="n">zoom_start</span><span class="o">=</span><span class="mi">13</span><span class="p">)</span>
+</span><span id="__span-17-5"><a id="__codelineno-17-5" name="__codelineno-17-5" href="#__codelineno-17-5"></a><span class="k">for</span> <span class="n">feature</span> <span class="ow">in</span> <span class="n">nodes</span><span class="p">[</span><span class="s2">&quot;features&quot;</span><span class="p">]:</span>
+</span><span id="__span-17-6"><a id="__codelineno-17-6" name="__codelineno-17-6" href="#__codelineno-17-6"></a>    <span class="n">lat</span> <span class="o">=</span> <span class="n">feature</span><span class="p">[</span><span class="s2">&quot;properties&quot;</span><span class="p">][</span><span class="s2">&quot;lat&quot;</span><span class="p">]</span>
+</span><span id="__span-17-7"><a id="__codelineno-17-7" name="__codelineno-17-7" href="#__codelineno-17-7"></a>    <span class="n">lon</span> <span class="o">=</span> <span class="n">feature</span><span class="p">[</span><span class="s2">&quot;properties&quot;</span><span class="p">][</span><span class="s2">&quot;lon&quot;</span><span class="p">]</span>
+</span><span id="__span-17-8"><a id="__codelineno-17-8" name="__codelineno-17-8" href="#__codelineno-17-8"></a>    <span class="n">folium</span><span class="o">.</span><span class="n">CircleMarker</span><span class="p">([</span><span class="n">lat</span><span class="p">,</span> <span class="n">lon</span><span class="p">],</span> <span class="n">radius</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">add_to</span><span class="p">(</span><span class="n">m</span><span class="p">)</span>
 </span></code></pre></div>
 <hr />
 <h3 id="edges_geojson"><code>edges_geojson</code><a class="headerlink" href="#edges_geojson" title="Permanent link">&para;</a></h3>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="n">graph</span><span class="o">.</span><span class="n">edges_geojson</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">str</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-18-1"><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a><span class="n">graph</span><span class="o">.</span><span class="n">edges_geojson</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">str</span>
 </span></code></pre></div>
 <p>Return all graph edges as a GeoJSON <code>FeatureCollection</code> of <code>LineString</code> features.</p>
 <p>Each feature has properties:</p>
@@ -1325,7 +1671,7 @@ with raw OSM tags as properties.</p>
 <tr>
 <td><code>length_m</code></td>
 <td><code>float</code></td>
-<td>Edge length in metres</td>
+<td>Edge length in meters</td>
 </tr>
 <tr>
 <td><code>speed_kph</code></td>
@@ -1350,11 +1696,11 @@ with raw OSM tags as properties.</p>
 </tbody>
 </table>
 <p><strong>Example</strong></p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">folium</span><span class="o">,</span><span class="w"> </span><span class="nn">json</span>
-</span><span id="__span-14-2"><a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>
-</span><span id="__span-14-3"><a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a><span class="n">edges</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">graph</span><span class="o">.</span><span class="n">edges_geojson</span><span class="p">())</span>
-</span><span id="__span-14-4"><a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="n">m</span> <span class="o">=</span> <span class="n">folium</span><span class="o">.</span><span class="n">Map</span><span class="p">(</span><span class="n">location</span><span class="o">=</span><span class="p">[</span><span class="mf">48.137</span><span class="p">,</span> <span class="mf">11.575</span><span class="p">],</span> <span class="n">zoom_start</span><span class="o">=</span><span class="mi">13</span><span class="p">)</span>
-</span><span id="__span-14-5"><a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a><span class="n">folium</span><span class="o">.</span><span class="n">GeoJson</span><span class="p">(</span><span class="n">edges</span><span class="p">,</span> <span class="n">style_function</span><span class="o">=</span><span class="k">lambda</span> <span class="n">_</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;color&quot;</span><span class="p">:</span> <span class="s2">&quot;#3388ff&quot;</span><span class="p">,</span> <span class="s2">&quot;weight&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">})</span><span class="o">.</span><span class="n">add_to</span><span class="p">(</span><span class="n">m</span><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-19-1"><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">folium</span><span class="o">,</span><span class="w"> </span><span class="nn">json</span>
+</span><span id="__span-19-2"><a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a>
+</span><span id="__span-19-3"><a id="__codelineno-19-3" name="__codelineno-19-3" href="#__codelineno-19-3"></a><span class="n">edges</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">graph</span><span class="o">.</span><span class="n">edges_geojson</span><span class="p">())</span>
+</span><span id="__span-19-4"><a id="__codelineno-19-4" name="__codelineno-19-4" href="#__codelineno-19-4"></a><span class="n">m</span> <span class="o">=</span> <span class="n">folium</span><span class="o">.</span><span class="n">Map</span><span class="p">(</span><span class="n">location</span><span class="o">=</span><span class="p">[</span><span class="mf">48.137</span><span class="p">,</span> <span class="mf">11.575</span><span class="p">],</span> <span class="n">zoom_start</span><span class="o">=</span><span class="mi">13</span><span class="p">)</span>
+</span><span id="__span-19-5"><a id="__codelineno-19-5" name="__codelineno-19-5" href="#__codelineno-19-5"></a><span class="n">folium</span><span class="o">.</span><span class="n">GeoJson</span><span class="p">(</span><span class="n">edges</span><span class="p">,</span> <span class="n">style_function</span><span class="o">=</span><span class="k">lambda</span> <span class="n">_</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;color&quot;</span><span class="p">:</span> <span class="s2">&quot;#3388ff&quot;</span><span class="p">,</span> <span class="s2">&quot;weight&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">})</span><span class="o">.</span><span class="n">add_to</span><span class="p">(</span><span class="n">m</span><span class="p">)</span>
 </span></code></pre></div>
 
 

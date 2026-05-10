@@ -848,7 +848,7 @@
 
 
 <h1 id="graphways">graphways<a class="headerlink" href="#graphways" title="Permanent link">&para;</a></h1>
-<p><strong>Fast isochrones, routing, and POI lookups from OpenStreetMap — written in Rust, callable from Python.</strong></p>
+<p><strong>Fast isochrones, routing, and POI lookups from OpenStreetMap -- written in Rust, callable from Python.</strong></p>
 <p><a href="https://pypi.org/project/graphways/"><img alt="PyPI" src="https://img.shields.io/pypi/v/graphways" /></a>
 <a href="https://crates.io/crates/graphways"><img alt="Crates.io" src="https://img.shields.io/crates/v/graphways" /></a>
 <a href="https://opensource.org/licenses/MIT"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-green.svg" /></a></p>
@@ -856,27 +856,31 @@
 <h2 id="what-it-does">What it does<a class="headerlink" href="#what-it-does" title="Permanent link">&para;</a></h2>
 <p>graphways queries OpenStreetMap, builds a road-network graph, and gives you:</p>
 <ul>
-<li><strong>Isochrones</strong> — polygons bounding everything reachable within a time limit</li>
-<li><strong>Point-to-point routing</strong> — A* routes with per-waypoint cumulative travel times</li>
-<li><strong>POI fetching</strong> — amenities, shops, and other features within any isochrone</li>
-<li><strong>Graph introspection</strong> — inspect nodes, edges, and the network structure directly</li>
+<li><strong>Isochrones</strong> -- polygons bounding everything reachable within a time limit</li>
+<li><strong>Point-to-point routing</strong> -- A* routes with per-waypoint cumulative travel times</li>
+<li><strong>POI fetching</strong> -- amenities, shops, and other features within any isochrone</li>
+<li><strong>Graph introspection</strong> -- inspect nodes, edges, and the network structure directly</li>
 </ul>
-<p>All GeoJSON output. All cached. Typically 5–6× faster than osmnx for repeated queries.</p>
+<p>Routes, isochrones, snap diagnostics, and POIs return structured Python objects.
+Call <code>.to_geojson()</code> when you need serialized GeoJSON for maps or files.</p>
 <hr />
 <h2 id="30-second-start">30-second start<a class="headerlink" href="#30-second-start" title="Permanent link">&para;</a></h2>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">graphways</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">graphways</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">gw</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="c1"># Build the graph once — subsequent calls for the same area hit the cache</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">graph</span> <span class="o">=</span> <span class="n">graphways</span><span class="o">.</span><span class="n">build_graph</span><span class="p">(</span><span class="mf">48.137144</span><span class="p">,</span> <span class="mf">11.575399</span><span class="p">,</span> <span class="s2">&quot;Drive&quot;</span><span class="p">,</span> <span class="n">max_dist</span><span class="o">=</span><span class="mi">10_000</span><span class="p">)</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="c1"># Isochrones from the same point</span>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="n">isos</span> <span class="o">=</span> <span class="n">graph</span><span class="o">.</span><span class="n">isochrone</span><span class="p">((</span><span class="mf">48.137144</span><span class="p">,</span> <span class="mf">11.575399</span><span class="p">),</span> <span class="n">minutes</span><span class="o">=</span><span class="p">[</span><span class="mi">5</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">15</span><span class="p">,</span> <span class="mi">20</span><span class="p">])</span>
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>
-</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="c1"># Route to somewhere else</span>
-</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="n">route</span> <span class="o">=</span> <span class="n">graph</span><span class="o">.</span><span class="n">route</span><span class="p">((</span><span class="mf">48.137144</span><span class="p">,</span> <span class="mf">11.575399</span><span class="p">),</span> <span class="p">(</span><span class="mf">48.154560</span><span class="p">,</span> <span class="mf">11.530840</span><span class="p">))</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="c1"># Build the graph once; reuse this object for repeated local queries.</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">graph</span> <span class="o">=</span> <span class="n">gw</span><span class="o">.</span><span class="n">SpatialGraph</span><span class="o">.</span><span class="n">from_place</span><span class="p">(</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="s2">&quot;Marienplatz, Munich, Germany&quot;</span><span class="p">,</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">network</span><span class="o">=</span><span class="s2">&quot;drive&quot;</span><span class="p">,</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">max_dist</span><span class="o">=</span><span class="mi">10_000</span><span class="p">,</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="p">)</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="n">isos</span> <span class="o">=</span> <span class="n">graph</span><span class="o">.</span><span class="n">isochrone</span><span class="p">((</span><span class="mf">48.137144</span><span class="p">,</span> <span class="mf">11.575399</span><span class="p">),</span> <span class="n">minutes</span><span class="o">=</span><span class="p">[</span><span class="mi">5</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">15</span><span class="p">,</span> <span class="mi">20</span><span class="p">])</span>
 </span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>
-</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="c1"># What&#39;s reachable?</span>
-</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="n">pois</span> <span class="o">=</span> <span class="n">graph</span><span class="o">.</span><span class="n">fetch_pois</span><span class="p">(</span><span class="n">isos</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="n">route</span> <span class="o">=</span> <span class="n">graph</span><span class="o">.</span><span class="n">route</span><span class="p">((</span><span class="mf">48.137144</span><span class="p">,</span> <span class="mf">11.575399</span><span class="p">),</span> <span class="p">(</span><span class="mf">48.154560</span><span class="p">,</span> <span class="mf">11.530840</span><span class="p">))</span>
+</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="nb">print</span><span class="p">(</span><span class="n">route</span><span class="o">.</span><span class="n">distance_m</span><span class="p">,</span> <span class="n">route</span><span class="o">.</span><span class="n">duration_s</span><span class="p">)</span>
+</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>
+</span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a><span class="n">pois</span> <span class="o">=</span> <span class="n">graph</span><span class="o">.</span><span class="n">fetch_pois</span><span class="p">(</span><span class="n">isos</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+</span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a><span class="nb">print</span><span class="p">(</span><span class="n">pois</span><span class="o">.</span><span class="n">count</span><span class="p">)</span>
 </span></code></pre></div>
 <hr />
 <h2 id="features-at-a-glance">Features at a glance<a class="headerlink" href="#features-at-a-glance" title="Permanent link">&para;</a></h2>
@@ -890,11 +894,11 @@
 <tbody>
 <tr>
 <td>Graph construction</td>
-<td>Parses OSM XML into a petgraph <code>DiGraph</code></td>
+<td>Parses OSM XML or local OSM PBF into a reusable <code>SpatialGraph</code></td>
 </tr>
 <tr>
 <td>Simplification</td>
-<td>Collapses linear chains, deduplicates parallel edges — ~89% node/edge reduction</td>
+<td>Collapses linear chains, deduplicates parallel edges, and preserves edge geometry</td>
 </tr>
 <tr>
 <td>Spatial index</td>
@@ -902,74 +906,37 @@
 </tr>
 <tr>
 <td>Isochrones</td>
-<td>Single Dijkstra pass; hull computation parallelised across time limits</td>
+<td>Bounded graph search plus triangulated travel-time contours</td>
 </tr>
 <tr>
 <td>Routing</td>
-<td>A* with admissible straight-line heuristic</td>
-</tr>
-<tr>
-<td>Isochrone geometry</td>
-<td>Triangulated travel-time contours</td>
+<td>A* with an admissible straight-line heuristic</td>
 </tr>
 <tr>
 <td>Network types</td>
-<td>Drive · DriveService · Walk · Bike · All · AllPrivate</td>
+<td>Drive, DriveService, Walk, Bike, All, AllPrivate</td>
 </tr>
 <tr>
 <td>Caching</td>
-<td>3-level: disk XML → in-memory XML → in-memory graph</td>
+<td>Overpass XML cache: disk XML -&gt; in-memory XML</td>
 </tr>
 <tr>
 <td>Python bindings</td>
-<td>Full PyO3 bindings with type stubs</td>
+<td>Structured result objects with explicit GeoJSON export</td>
 </tr>
 </tbody>
 </table>
 <hr />
 <h2 id="performance">Performance<a class="headerlink" href="#performance" title="Permanent link">&para;</a></h2>
-<p>Benchmarks on the Munich road network (cached, no network I/O), Intel Core i7-11370H.
-Single Dijkstra pass compared against osmnx with a pre-enriched graph.</p>
-<table>
-<thead>
-<tr>
-<th style="text-align: right;">Radius</th>
-<th style="text-align: right;">Nodes</th>
-<th style="text-align: right;">Edges</th>
-<th style="text-align: right;">graphways</th>
-<th style="text-align: right;">osmnx</th>
-<th style="text-align: right;">Speedup</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align: right;">5 000 m</td>
-<td style="text-align: right;">6 251</td>
-<td style="text-align: right;">15 356</td>
-<td style="text-align: right;">0.030 s</td>
-<td style="text-align: right;">0.190 s</td>
-<td style="text-align: right;"><strong>6.3×</strong></td>
-</tr>
-<tr>
-<td style="text-align: right;">10 000 m</td>
-<td style="text-align: right;">16 183</td>
-<td style="text-align: right;">41 601</td>
-<td style="text-align: right;">0.064 s</td>
-<td style="text-align: right;">0.365 s</td>
-<td style="text-align: right;"><strong>5.7×</strong></td>
-</tr>
-<tr>
-<td style="text-align: right;">20 000 m</td>
-<td style="text-align: right;">32 501</td>
-<td style="text-align: right;">82 385</td>
-<td style="text-align: right;">0.092 s</td>
-<td style="text-align: right;">0.455 s</td>
-<td style="text-align: right;"><strong>4.9×</strong></td>
-</tr>
-</tbody>
-</table>
-<p>The gap reflects compiled Rust and petgraph's flat adjacency list vs pure-Python NetworkX.
-graphways's cache means graph construction is a one-time cost; the table shows steady-state performance for repeated queries over the same region.</p>
+<p>Graphways is designed for repeated local queries over a reusable <code>SpatialGraph</code>.
+The benchmark suite reports graph construction separately from steady-state
+route, reachability, and isochrone queries:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>python<span class="w"> </span>benchmarks/comparison.py
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>python<span class="w"> </span>benchmarks/engines/engines.py<span class="w"> </span>--pbf<span class="w"> </span>C:<span class="se">\p</span>ath<span class="se">\t</span>o<span class="se">\e</span>xtract.osm.pbf
+</span></code></pre></div>
+<p>Treat benchmark numbers as workload-specific. They depend on graph size,
+network profile, machine, cache state, and whether comparisons include
+server-based routing engines such as OSRM or Valhalla.</p>
 
 
 

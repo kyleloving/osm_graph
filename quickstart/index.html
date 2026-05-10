@@ -538,49 +538,21 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#the-two-usage-patterns" class="md-nav__link">
+  <a href="#the-core-pattern" class="md-nav__link">
     <span class="md-ellipsis">
       
-        The two usage patterns
+        The core pattern
       
     </span>
   </a>
-  
-    <nav class="md-nav" aria-label="The two usage patterns">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#stateless-functions-simple-one-off-queries" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Stateless functions (simple, one-off queries)
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#stateful-graph-object-multiple-queries-over-the-same-area" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Stateful Graph object (multiple queries over the same area)
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#working-with-geojson-output" class="md-nav__link">
+  <a href="#working-with-structured-results" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Working with GeoJSON output
+        Working with structured results
       
     </span>
   </a>
@@ -599,10 +571,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#choosing-a-hull-type" class="md-nav__link">
+  <a href="#caching" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Choosing a hull type
+        Caching
       
     </span>
   </a>
@@ -610,10 +582,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#caching" class="md-nav__link">
+  <a href="#network-services" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Caching
+        Network services
       
     </span>
   </a>
@@ -830,49 +802,21 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#the-two-usage-patterns" class="md-nav__link">
+  <a href="#the-core-pattern" class="md-nav__link">
     <span class="md-ellipsis">
       
-        The two usage patterns
+        The core pattern
       
     </span>
   </a>
-  
-    <nav class="md-nav" aria-label="The two usage patterns">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#stateless-functions-simple-one-off-queries" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Stateless functions (simple, one-off queries)
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#stateful-graph-object-multiple-queries-over-the-same-area" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Stateful Graph object (multiple queries over the same area)
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#working-with-geojson-output" class="md-nav__link">
+  <a href="#working-with-structured-results" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Working with GeoJSON output
+        Working with structured results
       
     </span>
   </a>
@@ -891,10 +835,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#choosing-a-hull-type" class="md-nav__link">
+  <a href="#caching" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Choosing a hull type
+        Caching
       
     </span>
   </a>
@@ -902,10 +846,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#caching" class="md-nav__link">
+  <a href="#network-services" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Caching
+        Network services
       
     </span>
   </a>
@@ -933,61 +877,56 @@
 
 
 <h1 id="quickstart">Quickstart<a class="headerlink" href="#quickstart" title="Permanent link">&para;</a></h1>
-<h2 id="the-two-usage-patterns">The two usage patterns<a class="headerlink" href="#the-two-usage-patterns" title="Permanent link">&para;</a></h2>
-<h3 id="stateless-functions-simple-one-off-queries">Stateless functions (simple, one-off queries)<a class="headerlink" href="#stateless-functions-simple-one-off-queries" title="Permanent link">&para;</a></h3>
-<p>Call <code>calc_isochrones</code> or <code>calc_route</code> directly. Each call internally fetches
-and caches the graph, so the first call for an area is slow (network I/O) and
-subsequent calls are fast (cache hit).</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">graphways</span>
+<h2 id="the-core-pattern">The core pattern<a class="headerlink" href="#the-core-pattern" title="Permanent link">&para;</a></h2>
+<p>Graphways is centered on a reusable <code>SpatialGraph</code>. Build the graph once for an area, then run reachability, isochrone, route, and POI queries against that graph.</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">graphways</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">gw</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="c1"># Geocode a place name</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">lat</span><span class="p">,</span> <span class="n">lon</span> <span class="o">=</span> <span class="n">graphways</span><span class="o">.</span><span class="n">geocode</span><span class="p">(</span><span class="s2">&quot;Marienplatz, Munich, Germany&quot;</span><span class="p">)</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">origin</span> <span class="o">=</span> <span class="p">(</span><span class="mf">48.137144</span><span class="p">,</span> <span class="mf">11.575399</span><span class="p">)</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">destination</span> <span class="o">=</span> <span class="p">(</span><span class="mf">48.154560</span><span class="p">,</span> <span class="mf">11.530840</span><span class="p">)</span>
 </span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="c1"># Isochrones: 5, 10, 15, 20 minutes driving</span>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="n">isos</span> <span class="o">=</span> <span class="n">graphways</span><span class="o">.</span><span class="n">calc_isochrones</span><span class="p">(</span><span class="n">lat</span><span class="p">,</span> <span class="n">lon</span><span class="p">,</span> <span class="p">[</span><span class="mi">300</span><span class="p">,</span> <span class="mi">600</span><span class="p">,</span> <span class="mi">900</span><span class="p">,</span> <span class="mi">1200</span><span class="p">],</span> <span class="s2">&quot;Drive&quot;</span><span class="p">)</span>
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>
-</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="c1"># Route between two points</span>
-</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="n">route</span> <span class="o">=</span> <span class="n">graphways</span><span class="o">.</span><span class="n">calc_route</span><span class="p">(</span><span class="n">lat</span><span class="p">,</span> <span class="n">lon</span><span class="p">,</span> <span class="mf">48.154560</span><span class="p">,</span> <span class="mf">11.530840</span><span class="p">,</span> <span class="s2">&quot;Drive&quot;</span><span class="p">)</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="n">graph</span> <span class="o">=</span> <span class="n">gw</span><span class="o">.</span><span class="n">SpatialGraph</span><span class="o">.</span><span class="n">from_place</span><span class="p">(</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="s2">&quot;Marienplatz, Munich, Germany&quot;</span><span class="p">,</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="n">network</span><span class="o">=</span><span class="s2">&quot;drive&quot;</span><span class="p">,</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="n">max_dist</span><span class="o">=</span><span class="mi">10_000</span><span class="p">,</span>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="p">)</span>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="nb">print</span><span class="p">(</span><span class="n">graph</span><span class="p">)</span>
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>
+</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="n">isos</span> <span class="o">=</span> <span class="n">graph</span><span class="o">.</span><span class="n">isochrone</span><span class="p">(</span><span class="n">origin</span><span class="p">,</span> <span class="n">minutes</span><span class="o">=</span><span class="p">[</span><span class="mi">5</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">15</span><span class="p">,</span> <span class="mi">20</span><span class="p">])</span>
+</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a><span class="n">route</span> <span class="o">=</span> <span class="n">graph</span><span class="o">.</span><span class="n">route</span><span class="p">(</span><span class="n">origin</span><span class="p">,</span> <span class="n">destination</span><span class="p">)</span>
+</span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a><span class="n">pois</span> <span class="o">=</span> <span class="n">graph</span><span class="o">.</span><span class="n">fetch_pois</span><span class="p">(</span><span class="n">isos</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+</span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>
+</span><span id="__span-0-17"><a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a><span class="nb">print</span><span class="p">(</span><span class="n">route</span><span class="o">.</span><span class="n">distance_m</span><span class="p">,</span> <span class="n">route</span><span class="o">.</span><span class="n">duration_s</span><span class="p">)</span>
+</span><span id="__span-0-18"><a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a><span class="nb">print</span><span class="p">(</span><span class="n">route</span><span class="o">.</span><span class="n">origin_snap</span><span class="o">.</span><span class="n">distance_m</span><span class="p">)</span>
+</span><span id="__span-0-19"><a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a><span class="nb">print</span><span class="p">(</span><span class="n">pois</span><span class="o">.</span><span class="n">count</span><span class="p">)</span>
 </span></code></pre></div>
-<h3 id="stateful-graph-object-multiple-queries-over-the-same-area">Stateful Graph object (multiple queries over the same area)<a class="headerlink" href="#stateful-graph-object-multiple-queries-over-the-same-area" title="Permanent link">&para;</a></h3>
-<p><code>build_graph</code> returns a <code>Graph</code> that you reuse for isochrones, routing, and POI
-lookups without re-loading data from the cache each time.</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">graphways</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="n">graph</span> <span class="o">=</span> <span class="n">graphways</span><span class="o">.</span><span class="n">build_graph</span><span class="p">(</span><span class="mf">48.137144</span><span class="p">,</span> <span class="mf">11.575399</span><span class="p">,</span> <span class="s2">&quot;Drive&quot;</span><span class="p">,</span> <span class="n">max_dist</span><span class="o">=</span><span class="mi">10_000</span><span class="p">)</span>
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="nb">print</span><span class="p">(</span><span class="n">graph</span><span class="p">)</span>  <span class="c1"># Graph(nodes=6251, edges=15356, network_type=Drive)</span>
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>
-</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="c1"># Compute isochrones for multiple origin points using the same graph</span>
-</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="n">origins</span> <span class="o">=</span> <span class="p">[(</span><span class="mf">48.137144</span><span class="p">,</span> <span class="mf">11.575399</span><span class="p">),</span> <span class="p">(</span><span class="mf">48.154560</span><span class="p">,</span> <span class="mf">11.530840</span><span class="p">)]</span>
-</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="k">for</span> <span class="n">lat</span><span class="p">,</span> <span class="n">lon</span> <span class="ow">in</span> <span class="n">origins</span><span class="p">:</span>
-</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>    <span class="n">isos</span> <span class="o">=</span> <span class="n">graph</span><span class="o">.</span><span class="n">isochrone</span><span class="p">((</span><span class="n">lat</span><span class="p">,</span> <span class="n">lon</span><span class="p">),</span> <span class="n">minutes</span><span class="o">=</span><span class="p">[</span><span class="mi">5</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">15</span><span class="p">])</span>
-</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>    <span class="n">pois</span> <span class="o">=</span> <span class="n">graph</span><span class="o">.</span><span class="n">fetch_pois</span><span class="p">(</span><span class="n">isos</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>  <span class="c1"># POIs within the largest isochrone</span>
-</span></code></pre></div>
-<p>Prefer the <code>Graph</code> object whenever you make more than one query for the same area.</p>
+<p>Use <code>SpatialGraph.from_pbf(path, network="walk")</code> for local offline OSM PBF workflows, or <code>SpatialGraph.from_osm(xml, network="walk")</code> when you already have OSM XML.</p>
 <hr />
-<h2 id="working-with-geojson-output">Working with GeoJSON output<a class="headerlink" href="#working-with-geojson-output" title="Permanent link">&para;</a></h2>
-<p>All results come back as GeoJSON strings. Parse them with the standard library:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="c1"># Isochrone geometry</span>
-</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="n">iso</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">isos</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
-</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="nb">print</span><span class="p">(</span><span class="n">iso</span><span class="p">[</span><span class="s2">&quot;type&quot;</span><span class="p">])</span>        <span class="c1"># &quot;Polygon&quot;</span>
-</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="nb">print</span><span class="p">(</span><span class="n">iso</span><span class="p">[</span><span class="s2">&quot;coordinates&quot;</span><span class="p">])</span> <span class="c1"># [[lon, lat], ...]</span>
-</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>
-</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="c1"># Route feature</span>
-</span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="n">route_data</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">route</span><span class="p">)</span>
-</span><span id="__span-2-10"><a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="n">props</span> <span class="o">=</span> <span class="n">route_data</span><span class="p">[</span><span class="s2">&quot;properties&quot;</span><span class="p">]</span>
-</span><span id="__span-2-11"><a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Distance: </span><span class="si">{</span><span class="n">props</span><span class="p">[</span><span class="s1">&#39;distance_m&#39;</span><span class="p">]</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2"> m&quot;</span><span class="p">)</span>
-</span><span id="__span-2-12"><a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Duration: </span><span class="si">{</span><span class="n">props</span><span class="p">[</span><span class="s1">&#39;duration_s&#39;</span><span class="p">]</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2"> s&quot;</span><span class="p">)</span>
-</span><span id="__span-2-13"><a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Waypoints: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">props</span><span class="p">[</span><span class="s1">&#39;cumulative_times_s&#39;</span><span class="p">])</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-</span><span id="__span-2-14"><a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a>
-</span><span id="__span-2-15"><a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a><span class="c1"># POI FeatureCollection</span>
-</span><span id="__span-2-16"><a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a><span class="n">pois_data</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">pois</span><span class="p">)</span>
-</span><span id="__span-2-17"><a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a><span class="k">for</span> <span class="n">feature</span> <span class="ow">in</span> <span class="n">pois_data</span><span class="p">[</span><span class="s2">&quot;features&quot;</span><span class="p">]:</span>
-</span><span id="__span-2-18"><a id="__codelineno-2-18" name="__codelineno-2-18" href="#__codelineno-2-18"></a>    <span class="n">tags</span> <span class="o">=</span> <span class="n">feature</span><span class="p">[</span><span class="s2">&quot;properties&quot;</span><span class="p">]</span>
-</span><span id="__span-2-19"><a id="__codelineno-2-19" name="__codelineno-2-19" href="#__codelineno-2-19"></a>    <span class="n">name</span> <span class="o">=</span> <span class="n">tags</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">,</span> <span class="s2">&quot;unnamed&quot;</span><span class="p">)</span>
-</span><span id="__span-2-20"><a id="__codelineno-2-20" name="__codelineno-2-20" href="#__codelineno-2-20"></a>    <span class="n">kind</span> <span class="o">=</span> <span class="n">tags</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;amenity&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="n">tags</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;shop&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="s2">&quot;?&quot;</span>
-</span><span id="__span-2-21"><a id="__codelineno-2-21" name="__codelineno-2-21" href="#__codelineno-2-21"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> (</span><span class="si">{</span><span class="n">kind</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">)</span>
+<h2 id="working-with-structured-results">Working with structured results<a class="headerlink" href="#working-with-structured-results" title="Permanent link">&para;</a></h2>
+<p>Routes, snap diagnostics, and isochrones are structured Python objects. Export
+GeoJSON explicitly when you need to pass geometry to mapping tools:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="c1"># Isochrone geometry</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="n">iso</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">isos</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">to_geojson</span><span class="p">())</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="nb">print</span><span class="p">(</span><span class="n">iso</span><span class="p">[</span><span class="s2">&quot;type&quot;</span><span class="p">])</span>        <span class="c1"># &quot;Polygon&quot;</span>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="nb">print</span><span class="p">(</span><span class="n">iso</span><span class="p">[</span><span class="s2">&quot;coordinates&quot;</span><span class="p">])</span> <span class="c1"># [[lon, lat], ...]</span>
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="c1"># Route metrics and feature export</span>
+</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Distance: </span><span class="si">{</span><span class="n">route</span><span class="o">.</span><span class="n">distance_m</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2"> m&quot;</span><span class="p">)</span>
+</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Duration: </span><span class="si">{</span><span class="n">route</span><span class="o">.</span><span class="n">duration_s</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2"> s&quot;</span><span class="p">)</span>
+</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Waypoints: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">route</span><span class="o">.</span><span class="n">cumulative_times_s</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Origin snap: </span><span class="si">{</span><span class="n">route</span><span class="o">.</span><span class="n">origin_snap</span><span class="o">.</span><span class="n">distance_m</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> m&quot;</span><span class="p">)</span>
+</span><span id="__span-1-13"><a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a>
+</span><span id="__span-1-14"><a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="n">route_data</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">route</span><span class="o">.</span><span class="n">to_geojson</span><span class="p">())</span>
+</span><span id="__span-1-15"><a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a><span class="n">props</span> <span class="o">=</span> <span class="n">route_data</span><span class="p">[</span><span class="s2">&quot;properties&quot;</span><span class="p">]</span>
+</span><span id="__span-1-16"><a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a>
+</span><span id="__span-1-17"><a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a><span class="c1"># POI FeatureCollection</span>
+</span><span id="__span-1-18"><a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a><span class="n">pois_data</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">pois</span><span class="o">.</span><span class="n">to_geojson</span><span class="p">())</span>
+</span><span id="__span-1-19"><a id="__codelineno-1-19" name="__codelineno-1-19" href="#__codelineno-1-19"></a><span class="k">for</span> <span class="n">feature</span> <span class="ow">in</span> <span class="n">pois_data</span><span class="p">[</span><span class="s2">&quot;features&quot;</span><span class="p">]:</span>
+</span><span id="__span-1-20"><a id="__codelineno-1-20" name="__codelineno-1-20" href="#__codelineno-1-20"></a>    <span class="n">tags</span> <span class="o">=</span> <span class="n">feature</span><span class="p">[</span><span class="s2">&quot;properties&quot;</span><span class="p">]</span>
+</span><span id="__span-1-21"><a id="__codelineno-1-21" name="__codelineno-1-21" href="#__codelineno-1-21"></a>    <span class="n">name</span> <span class="o">=</span> <span class="n">tags</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">,</span> <span class="s2">&quot;unnamed&quot;</span><span class="p">)</span>
+</span><span id="__span-1-22"><a id="__codelineno-1-22" name="__codelineno-1-22" href="#__codelineno-1-22"></a>    <span class="n">kind</span> <span class="o">=</span> <span class="n">tags</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;amenity&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="n">tags</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;shop&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="s2">&quot;?&quot;</span>
+</span><span id="__span-1-23"><a id="__codelineno-1-23" name="__codelineno-1-23" href="#__codelineno-1-23"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> (</span><span class="si">{</span><span class="n">kind</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">)</span>
 </span></code></pre></div>
 <hr />
 <h2 id="choosing-a-network-type">Choosing a network type<a class="headerlink" href="#choosing-a-network-type" title="Permanent link">&para;</a></h2>
@@ -1000,61 +939,57 @@ lookups without re-loading data from the cache each time.</p>
 </thead>
 <tbody>
 <tr>
-<td><code>"Drive"</code></td>
+<td><code>"drive"</code></td>
 <td>Public roads accessible to private cars; excludes service roads, driveways</td>
 </tr>
 <tr>
-<td><code>"DriveService"</code></td>
+<td><code>"drive_service"</code></td>
 <td>Like <code>Drive</code> but includes service roads</td>
 </tr>
 <tr>
-<td><code>"Walk"</code></td>
+<td><code>"walk"</code></td>
 <td>Footways, pedestrian paths, and shared roads where walking is permitted</td>
 </tr>
 <tr>
-<td><code>"Bike"</code></td>
+<td><code>"bike"</code></td>
 <td>Cycleways and roads open to bicycles</td>
 </tr>
 <tr>
-<td><code>"All"</code></td>
+<td><code>"all"</code></td>
 <td>All highway types except private access</td>
 </tr>
 <tr>
-<td><code>"AllPrivate"</code></td>
+<td><code>"all_private"</code></td>
 <td>All highway types including private access</td>
 </tr>
 </tbody>
 </table>
 <hr />
-<h2 id="choosing-a-hull-type">Choosing a hull type<a class="headerlink" href="#choosing-a-hull-type" title="Permanent link">&para;</a></h2>
-<table>
-<thead>
-<tr>
-<th>Value</th>
-<th>Shape</th>
-<th>Speed</th>
-<th>Best for</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Isochrone polygons use triangulated travel-time contour extraction by default.</td>
-<td></td>
-<td></td>
-<td></td>
-</tr>
-</tbody>
-</table>
-<hr />
 <h2 id="caching">Caching<a class="headerlink" href="#caching" title="Permanent link">&para;</a></h2>
-<p>graphways uses a three-level cache so repeated queries skip the network entirely:</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>Overpass API (network) → disk XML → in-memory XML → in-memory graph
+<p>graphways caches Overpass XML responses so repeated <code>from_place(...)</code> calls can
+skip the network:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>Overpass API (network) -&gt; disk XML -&gt; in-memory XML
 </span></code></pre></div>
-<p>Each level persists across process restarts (disk) or within a session (memory).</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nb">print</span><span class="p">(</span><span class="n">graphways</span><span class="o">.</span><span class="n">cache_dir</span><span class="p">())</span>  <span class="c1"># shows the disk cache location</span>
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="n">graphways</span><span class="o">.</span><span class="n">clear_cache</span><span class="p">()</span>       <span class="c1"># wipe all three levels</span>
+<p>Disk cache entries persist across process restarts. The in-memory XML cache only
+lasts for the current process. Built graphs are not hidden in a global cache;
+hold onto the returned <code>SpatialGraph</code> and reuse it directly.</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nb">print</span><span class="p">(</span><span class="n">gw</span><span class="o">.</span><span class="n">cache_dir</span><span class="p">())</span>  <span class="c1"># shows the disk cache location</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">gw</span><span class="o">.</span><span class="n">clear_cache</span><span class="p">()</span>       <span class="c1"># wipe XML caches</span>
 </span></code></pre></div>
-<p>Set <code>graphways_CACHE_DIR</code> to override the default cache location.</p>
+<p>Set <code>GRAPHWAYS_CACHE_DIR</code> to override the default cache location.</p>
+<h2 id="network-services">Network services<a class="headerlink" href="#network-services" title="Permanent link">&para;</a></h2>
+<p><code>SpatialGraph.from_place(...)</code>, <code>gw.geocode(...)</code>, and POI fetching use public
+OpenStreetMap services by default. Graphways sends a descriptive User-Agent,
+rate-limits Nominatim geocoding requests, and retries transient <code>429</code> / <code>5xx</code>
+responses.</p>
+<p>Set these environment variables when you need local mirrors, custom endpoints,
+or a project-specific contact string:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nv">GRAPHWAYS_OVERPASS_URL</span><span class="o">=</span>https://overpass-api.de/api/interpreter
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="nv">GRAPHWAYS_NOMINATIM_URL</span><span class="o">=</span>https://nominatim.openstreetmap.org/search
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="nv">GRAPHWAYS_USER_AGENT</span><span class="o">=</span><span class="s2">&quot;your-app/1.0 contact@example.com&quot;</span>
+</span></code></pre></div>
+<p>Use <code>SpatialGraph.from_pbf(...)</code> for offline workflows that should not touch
+network services.</p>
 
 
 

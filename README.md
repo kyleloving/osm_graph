@@ -125,40 +125,6 @@ Current benchmarks are intentionally kept in `benchmarks/` rather than treated
 as a universal claim. Performance depends on graph size, network profile,
 machine, cache state, and output geometry settings.
 
-## Project Status
-
-Graphways is pre-1.0. The core API is converging around:
-
-```python
-graph = gw.SpatialGraph.from_place("Washington, DC", network="walk")
-iso = graph.isochrone(origin, minutes=[10, 20, 30])
-route = graph.route(origin, destination)
-reachable = graph.reachable(origin, minutes=15)
-prism = graph.prism(origin, destination, max_minutes=45)
-```
-
-Known areas still under active development include turn restrictions,
-profile-specific access rules, disconnected-region polygon output, richer
-benchmark staging, and larger-extract graph storage.
-
-## Relationship to Other Tools
-
-Use **OSMnx** for mature Python-first urban network analysis and broad OSM data
-workflows. Use **Valhalla**, **OSRM**, or **GraphHopper** for production routing
-servers. Use **Graphways** when you want fast local OSM reachability, routing,
-and isochrones from Python without standing up infrastructure.
-
-## Citation
-
-Graphways does not yet have an academic citation. If you use it in research,
-please cite the repository for now:
-
-```text
-Loving, K. Graphways: fast local OpenStreetMap reachability, routing,
-and isochrones from Python, powered by Rust.
-https://github.com/kyleloving/graphways
-```
-
 ## License
 
 Graphways is open source and licensed under the MIT license. OpenStreetMap data
